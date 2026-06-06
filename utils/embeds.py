@@ -5,6 +5,7 @@ Produces Avrae-style embeds showing pilot and mech info.
 from __future__ import annotations
 import discord
 from utils.parser import LancerCharacter, Pilot, Mech
+from utils.tags import format_tag
 
 # ─── Colour palette (Lancer-ish) ──────────────────────────────────────────────
 LANCER_RED    = 0xCF2020
@@ -21,7 +22,6 @@ SOURCE_COLORS = {
     "HORUS":    0x9C27B0,
     "HA":       0xE8871A,
 }
-
 
 def _mech_colour(mech: Mech) -> int:
     return SOURCE_COLORS.get(mech.frame_source.upper(), LANCER_RED)
@@ -178,6 +178,40 @@ def build_mech_embed(char: LancerCharacter, mech: Mech) -> discord.Embed:
         ),
         inline=False,
     )
+    
+    if mech.traits:
+        trait_lines = []
+
+        for trait in mech.traits:
+            text = trait.description[:150]
+            if len(trait.description) > 150:
+                text += "..."
+
+            trait_lines.append(
+                f"**{trait.name}**\n{text}"
+            )
+
+        embed.add_field(
+            name=f"🧬 Frame Traits ({len(mech.traits)})",
+            value="\n\n".join(trait_lines)[:1024],
+            inline=False,
+        )
+    
+    if mech.core_power:
+        cp = mech.core_power
+
+        value = (
+            f"**Passive:** {cp.passive_name}\n"
+            f"{cp.passive_effect[:250]}\n\n"
+            f"**Active:** {cp.active_name}\n"
+            f"{cp.active_effect[:250]}"
+        )
+
+        embed.add_field(
+            name=f"⚛️ Core Power — {cp.name}",
+            value=value[:1024],
+            inline=False,
+        )
 
     # ── Weapons ──────────────────────────────────────────────────────────────
     if mech.weapons:
@@ -287,7 +321,8 @@ def build_weapons_embed(char: LancerCharacter, mech: Mech) -> discord.Embed:
             effect = w.effect[:300] + ("…" if len(w.effect) > 300 else "")
             value_parts.append(f"**Effect:** {effect}")
         if w.tag_ids:
-            value_parts.append(f"**Tags:** {', '.join(w.tag_ids)}")
+            tag_names = [format_tag(tag) for tag in w.tags]
+            value_parts.append(f"**Tags:** {', '.join(tag_names)}")
 
         embed.add_field(name=w.name, value="\n".join(value_parts), inline=False)
 
@@ -314,8 +349,9 @@ def build_systems_embed(char: LancerCharacter, mech: Mech) -> discord.Embed:
         if sys.effect:
             effect = sys.effect[:300] + ("…" if len(sys.effect) > 300 else "")
             value_parts.append(f"**Effect:** {effect}")
-        if sys.tag_ids:
-            value_parts.append(f"**Tags:** {', '.join(sys.tag_ids)}")
+        if sys.tags:
+            tag_names = [format_tag(tag) for tag in sys.tags]
+            value_parts.append(f"**Tags:** {', '.join(tag_names)}")
 
         embed.add_field(
             name=sys.name,

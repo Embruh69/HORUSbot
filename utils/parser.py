@@ -115,11 +115,12 @@ class Weapon:
 @dataclass
 class SystemAction:
     name: str
-    activation: str     # Protocol / Quick / Full / Reaction / Invade / etc.
-    detail: str
-    damage: list[dict]  # [{type, val, ap?, target?, aoe?}, ...]
-    range_data: list[dict]
-    frequency: str
+    activation: str
+    detail: str = ""
+    damage: list[dict] = field(default_factory=list)
+    range_data: list[dict] = field(default_factory=list)
+    frequency: str = ""
+    trigger: str = ""
 
 
 @dataclass
@@ -145,6 +146,27 @@ class System:
                 return t.get("val", 1)
         return None
 
+@dataclass
+class FrameTrait:
+    name: str
+    description: str
+    actions: list[SystemAction] = field(default_factory=list)
+
+
+@dataclass
+class CorePower:
+    name: str
+    description: str
+
+    passive_name: str = ""
+    passive_effect: str = ""
+
+    active_name: str = ""
+    active_effect: str = ""
+
+    activation: str = ""
+    deactivation: str = ""
+    use: str = ""
 
 @dataclass
 class MechStats:
@@ -179,6 +201,8 @@ class Mech:
     weapons: list[Weapon]
     systems: list[System]
     is_active: bool
+    traits: list[FrameTrait] = field(default_factory=list)
+    core_power: CorePower | None = None
 
 
 # ─── Full Character ────────────────────────────────────────────────────────────
@@ -236,6 +260,7 @@ def _parse_action(a: dict) -> SystemAction:
         damage=a.get("damage", []),
         range_data=a.get("range", []),
         frequency=a.get("frequency", ""),
+        trigger=a.get("trigger",""),
     )
 
 
@@ -295,6 +320,52 @@ def _parse_mech(raw: dict, favorite_id: Optional[str]) -> Mech:
     idx = raw.get("active_loadout_index", 0)
     loadouts = raw.get("loadouts") or [{}]
     loadout = loadouts[min(idx, len(loadouts) - 1)]
+    
+    traits = []
+
+    for t in fd.get("traits", []):
+        actions = []
+
+        for a in t.get("actions", []):
+            actions.append(
+                SystemAction(
+                    name=a.get("name", ""),
+                    activation=a.get("activation", ""),
+                    trigger=a.get("trigger", ""),
+                    detail=a.get("detail", ""),
+                    damage=a.get("damage", []),
+                    range_data=a.get("range", []),
+                    frequency=a.get("frequency", ""),
+                )
+            )
+
+        traits.append(
+            FrameTrait(
+                name=t.get("name", ""),
+                description=_clean_html(t.get("description", "")),
+                actions=actions,
+            )
+        )
+        
+    core_json = fd.get("core_system")
+
+    core_power = None
+
+    if core_json:
+        core_power = CorePower(
+            name=core_json.get("name", ""),
+            description=_clean_html(core_json.get("description", "")),
+
+            passive_name=core_json.get("passive_name", ""),
+            passive_effect=_clean_html(core_json.get("passive_effect", "")),
+
+            active_name=core_json.get("active_name", ""),
+            active_effect=_clean_html(core_json.get("active_effect", "")),
+
+            activation=core_json.get("activation", ""),
+            deactivation=core_json.get("deactivation", ""),
+            use=core_json.get("use", ""),
+        )
 
     weapons: list[Weapon] = []
     for mount in loadout.get("mounts", []):
@@ -310,6 +381,7 @@ def _parse_mech(raw: dict, favorite_id: Optional[str]) -> Mech:
 
     systems = [_parse_system(s) for s in loadout.get("systems", [])]
     systems += [_parse_system(s) for s in loadout.get("integratedSystems", [])]
+    
 
     return Mech(
         id=raw.get("id", ""),
@@ -322,6 +394,8 @@ def _parse_mech(raw: dict, favorite_id: Optional[str]) -> Mech:
         weapons=weapons,
         systems=systems,
         is_active=(raw.get("id") == favorite_id),
+        traits=traits,
+        core_power=core_power,
     )
 
 

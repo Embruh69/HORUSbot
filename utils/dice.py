@@ -63,7 +63,7 @@ class AttackRollResult:
     grit: int
     accuracy_result: AccuracyResult
     total: int
-    crit: bool   # natural 20
+    crit: bool   
 
     def __str__(self) -> str:
         parts = [f"d20: **{self.d20}**", f"Grit: +{self.grit}"]
@@ -169,7 +169,7 @@ def roll_attack(grit: int, accuracy: int = 0, difficulty: int = 0) -> AttackRoll
         grit=grit,
         accuracy_result=acc_result,
         total=total,
-        crit=(d20 == 20),
+        crit=(d20 >= 20),
     )
 
 
