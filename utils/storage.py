@@ -104,7 +104,31 @@ def delete(guild_id: int, user_id: int) -> bool:
     return cur.rowcount > 0
 
 
-def list_guild(guild_id: int) -> list[dict]:
+def load_raw(guild_id: int, user_id: int) -> str | None:
+    """Return the raw JSON string for a character, or None."""
+    row = _conn().execute(
+        "SELECT raw_json FROM characters WHERE guild_id=? AND user_id=?",
+        (guild_id, user_id),
+    ).fetchone()
+    return row["raw_json"] if row else None
+
+
+def save_raw(guild_id: int, user_id: int, callsign: str, raw_json: str) -> None:
+    """Overwrite the stored JSON (used by HP/heat mutation buttons)."""
+    now = datetime.now(timezone.utc).isoformat()
+    con = _conn()
+    con.execute(
+        """
+        INSERT INTO characters (guild_id, user_id, callsign, raw_json, imported_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT (guild_id, user_id) DO UPDATE SET
+            callsign    = excluded.callsign,
+            raw_json    = excluded.raw_json,
+            imported_at = excluded.imported_at
+        """,
+        (guild_id, user_id, callsign, raw_json, now),
+    )
+    con.commit()
     """
     Return a list of dicts with 'user_id', 'callsign', 'imported_at'
     for every character registered in a guild.  Useful for future

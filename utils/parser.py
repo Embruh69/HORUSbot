@@ -16,7 +16,7 @@ class PilotSkill:
     name: str
     description: str
     family: str   # str / dex / int / cha
-    rank: int     # 1-6 (+2 per rank, so +2/+4/+6/+8/+10/+12)
+    rank: int     # 1-6 (+2 per rank)
 
     @property
     def bonus(self) -> int:
@@ -28,11 +28,10 @@ class PilotTalent:
     id: str
     name: str
     terse: str
-    rank: int     # 1-3
+    rank: int
 
     @property
     def active_ranks(self) -> list[str]:
-        """Return the names of all unlocked talent ranks."""
         return [f"Rank {i+1}" for i in range(self.rank)]
 
 
@@ -44,7 +43,6 @@ class PilotStats:
     evasion: int
     edef: int
     grit: int
-    # mech skill HASE
     hull: int
     agility: int
     systems: int
@@ -63,8 +61,8 @@ class Pilot:
     stats: PilotStats
     skills: list[PilotSkill]
     talents: list[PilotTalent]
-    licenses: list[tuple[str, int]]   # (license_id, rank)
-    core_bonuses: list[str]           # ids
+    licenses: list[tuple[str, int]]
+    core_bonuses: list[str]
     favorite_mech_id: Optional[str]
 
 
@@ -74,19 +72,24 @@ class Pilot:
 class Weapon:
     id: str
     name: str
-    weapon_type: str   # Melee / Rifle / etc.
-    mount_size: str    # Aux / Main / Heavy / Superheavy
-    damage: list[dict]   # [{type, val}, ...]
+    weapon_type: str        # Melee / Rifle / etc.
+    mount_size: str         # Aux / Main / Heavy / Superheavy
+    damage: list[dict]      # [{type, val, ap?}, ...]
     range_data: list[dict]
-    tags: list[str]
+    tags: list[dict]        # raw tag objects: [{id, val?}, ...]
     sp: int
     effect: str
+    description: str
+    on_hit: str
+    source: str
+    license_name: str
 
     @property
     def damage_str(self) -> str:
         parts = []
         for d in self.damage:
-            parts.append(f"{d.get('val', '?')} {d.get('type', '')}")
+            ap = " AP" if d.get("ap") else ""
+            parts.append(f"{d.get('val', '?')} {d.get('type', '')}{ap}")
         return " + ".join(parts) if parts else "—"
 
     @property
@@ -98,15 +101,49 @@ class Weapon:
             parts.append(f"{r.get('type', '')} {r.get('val', '')}")
         return ", ".join(parts)
 
+    @property
+    def tag_ids(self) -> list[str]:
+        return [t.get("id", "") for t in self.tags]
+
+    def heat_self(self) -> Optional[int | str]:
+        for t in self.tags:
+            if t.get("id") == "tg_heat_self":
+                return t.get("val", 1)
+        return None
+
+
+@dataclass
+class SystemAction:
+    name: str
+    activation: str     # Protocol / Quick / Full / Reaction / Invade / etc.
+    detail: str
+    damage: list[dict]  # [{type, val, ap?, target?, aoe?}, ...]
+    range_data: list[dict]
+    frequency: str
+
 
 @dataclass
 class System:
     id: str
     name: str
     sp: int
-    tags: list[str]
+    tags: list[dict]    # raw tag objects
     effect: str
     type: str
+    description: str
+    actions: list[SystemAction]
+    source: str
+    license_name: str
+
+    @property
+    def tag_ids(self) -> list[str]:
+        return [t.get("id", "") for t in self.tags]
+
+    def heat_self(self) -> Optional[int | str]:
+        for t in self.tags:
+            if t.get("id") == "tg_heat_self":
+                return t.get("val", 1)
+        return None
 
 
 @dataclass
@@ -124,7 +161,6 @@ class MechStats:
     repair_capacity: int
     sp: int
     size: int | float
-    # current hp/heat (for active tracking)
     current_hp: int
     current_heat: int
     current_structure: int
@@ -162,6 +198,14 @@ class LancerCharacter:
 
 # ─── Parse helpers ────────────────────────────────────────────────────────────
 
+def _clean_html(text: str) -> str:
+    """Strip basic HTML tags from comp/con description strings."""
+    import re
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", "", text)
+    return text.strip()
+
+
 def _parse_weapon(slot: dict) -> Optional[Weapon]:
     w = slot.get("weapon")
     if not w:
@@ -174,31 +218,51 @@ def _parse_weapon(slot: dict) -> Optional[Weapon]:
         mount_size=data.get("mount", slot.get("size", "Main")),
         damage=data.get("damage", []),
         range_data=data.get("range", []),
-        tags=[t.get("id", "") for t in data.get("tags", [])],
+        tags=data.get("tags", []),
         sp=data.get("sp", 0),
-        effect=data.get("effect", ""),
+        effect=_clean_html(data.get("effect", "") or ""),
+        description=_clean_html(data.get("description", "") or ""),
+        on_hit=_clean_html(data.get("on_hit", "") or ""),
+        source=data.get("source", ""),
+        license_name=data.get("license", ""),
+    )
+
+
+def _parse_action(a: dict) -> SystemAction:
+    return SystemAction(
+        name=a.get("name", ""),
+        activation=a.get("activation", ""),
+        detail=_clean_html(a.get("detail", "") or ""),
+        damage=a.get("damage", []),
+        range_data=a.get("range", []),
+        frequency=a.get("frequency", ""),
     )
 
 
 def _parse_system(s: dict) -> System:
     data = s.get("data", {})
+    actions = [_parse_action(a) for a in data.get("actions", [])]
     return System(
         id=s.get("id", ""),
         name=data.get("name", "Unknown System"),
         sp=data.get("sp", 0),
-        tags=[t.get("id", "") for t in data.get("tags", [])],
-        effect=data.get("effect", ""),
+        tags=data.get("tags", []),
+        effect=_clean_html(data.get("effect", "") or ""),
         type=data.get("type", ""),
+        description=_clean_html(data.get("description", "") or ""),
+        actions=actions,
+        source=data.get("source", ""),
+        license_name=data.get("license", ""),
     )
 
 
-def _parse_mech_stats(raw: dict, is_active: bool = False) -> MechStats:
+def _parse_mech_stats(raw: dict) -> MechStats:
     mx = raw.get("max", {})
     cu = raw.get("current", {})
 
-    def c(key, fallback_to_max=True):
+    def c(key):
         val = cu.get(key)
-        if val is None and fallback_to_max:
+        if val is None:
             val = mx.get(key, 0)
         return val or 0
 
@@ -228,7 +292,9 @@ def _parse_mech_stats(raw: dict, is_active: bool = False) -> MechStats:
 
 def _parse_mech(raw: dict, favorite_id: Optional[str]) -> Mech:
     fd = raw.get("frameData", {})
-    loadout = (raw.get("loadouts") or [{}])[raw.get("active_loadout_index", 0)]
+    idx = raw.get("active_loadout_index", 0)
+    loadouts = raw.get("loadouts") or [{}]
+    loadout = loadouts[min(idx, len(loadouts) - 1)]
 
     weapons: list[Weapon] = []
     for mount in loadout.get("mounts", []):
@@ -236,7 +302,6 @@ def _parse_mech(raw: dict, favorite_id: Optional[str]) -> Mech:
             w = _parse_weapon(slot)
             if w:
                 weapons.append(w)
-    # integrated weapons
     for im in loadout.get("integratedMounts", []):
         for slot in im.get("slots", []):
             w = _parse_weapon(slot)
@@ -283,8 +348,6 @@ def parse_compcon_json(raw: str | bytes | dict) -> LancerCharacter:
     """
     Parse a comp/con "Save Pilot" JSON export.
     Accepts a JSON string, bytes, or an already-decoded dict.
-    Returns a LancerCharacter dataclass.
-    Raises ValueError with a helpful message on bad input.
     """
     if isinstance(raw, (str, bytes)):
         try:
@@ -303,7 +366,6 @@ def parse_compcon_json(raw: str | bytes | dict) -> LancerCharacter:
 
     pilot_data = data.get("data", {})
 
-    # Skills
     skills = []
     for s in pilot_data.get("skills", []):
         sd = s.get("data", {})
@@ -315,7 +377,6 @@ def parse_compcon_json(raw: str | bytes | dict) -> LancerCharacter:
             rank=s.get("rank", 1),
         ))
 
-    # Talents
     talents = []
     for t in pilot_data.get("talents", []):
         td = t.get("data", {})
@@ -326,15 +387,12 @@ def parse_compcon_json(raw: str | bytes | dict) -> LancerCharacter:
             rank=t.get("rank", 1),
         ))
 
-    # Licenses  (id might be "mf_manticore" → strip "mf_" for display)
     licenses = [
         (lic.get("id", "?"), lic.get("rank", 0))
         for lic in pilot_data.get("licenses", [])
     ]
 
-    # Core bonuses
     core_bonuses = [cb.get("id", "") for cb in pilot_data.get("core_bonuses", [])]
-
     mech_skills = pilot_data.get("mechSkills", [0, 0, 0, 0])
     pilot_stats = _parse_pilot_stats(pilot_data.get("stats", {}), mech_skills)
 

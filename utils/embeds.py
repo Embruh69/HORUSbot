@@ -286,8 +286,8 @@ def build_weapons_embed(char: LancerCharacter, mech: Mech) -> discord.Embed:
             # Truncate long effect text for embed limits
             effect = w.effect[:300] + ("…" if len(w.effect) > 300 else "")
             value_parts.append(f"**Effect:** {effect}")
-        if w.tags:
-            value_parts.append(f"**Tags:** {', '.join(w.tags)}")
+        if w.tag_ids:
+            value_parts.append(f"**Tags:** {', '.join(w.tag_ids)}")
 
         embed.add_field(name=w.name, value="\n".join(value_parts), inline=False)
 
@@ -314,8 +314,8 @@ def build_systems_embed(char: LancerCharacter, mech: Mech) -> discord.Embed:
         if sys.effect:
             effect = sys.effect[:300] + ("…" if len(sys.effect) > 300 else "")
             value_parts.append(f"**Effect:** {effect}")
-        if sys.tags:
-            value_parts.append(f"**Tags:** {', '.join(sys.tags)}")
+        if sys.tag_ids:
+            value_parts.append(f"**Tags:** {', '.join(sys.tag_ids)}")
 
         embed.add_field(
             name=sys.name,
