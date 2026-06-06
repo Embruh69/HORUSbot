@@ -68,22 +68,3 @@ lancer-bot/
     ├── embeds.py            # Discord embed builders
     └── storage.py           # In-memory character store
 ```
-
----
-
-## Roadmap (future expansions)
-
-- [ ] Slash command versions of all commands
-- [ ] HP / Heat / Structure tracking with `!hp`, `!heat` commands  
-- [ ] Dice rolling (`!roll 1d20+grit`)
-- [ ] Multiple mech switching (`!mech <name>`)
-- [ ] Persistent storage (SQLite)
-- [ ] Action tracker (move, action, quick action, reaction)
-- [ ] Status/condition tracking
-
----
-
-## Storage note
-
-Characters are stored **in memory** and are lost when the bot restarts.  
-To persist characters across restarts, swap `utils/storage.py` for a SQLite or file-based backend.

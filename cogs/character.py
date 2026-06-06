@@ -74,7 +74,7 @@ class CharacterCog(commands.Cog, name="Character"):
                 await ctx.reply(f"❌ Could not parse your export:\n```\n{e}\n```", mention_author=False)
                 return
 
-            storage.save(ctx.guild.id, ctx.author.id, char)
+            storage.save(ctx.guild.id, ctx.author.id, char, raw.decode("utf-8"))
 
         embed = build_summary_embed(char)
         embed.set_author(name=f"✅ Imported — {char.pilot.callsign}", icon_url=ctx.author.display_avatar.url)
