@@ -160,7 +160,10 @@ def roll_accuracy(accuracy: int, difficulty: int) -> AccuracyResult:
 
 
 def roll_attack(grit: int, accuracy: int = 0, difficulty: int = 0) -> AttackRollResult:
-    """Roll a full Lancer attack: 1d20 + grit ± acc/diff."""
+    """
+    Roll a full Lancer attack: 1d20 + grit +/- acc/diff.
+    Crit = total >= 20 (not just a natural 20) per Lancer rules.
+    """
     d20 = random.randint(1, 20)
     acc_result = roll_accuracy(accuracy, difficulty)
     total = d20 + grit + acc_result.applied
@@ -169,8 +172,28 @@ def roll_attack(grit: int, accuracy: int = 0, difficulty: int = 0) -> AttackRoll
         grit=grit,
         accuracy_result=acc_result,
         total=total,
-        crit=(d20 >= 20),
+        crit=(total >= 20),   # Lancer: crit when TOTAL is 20+, not just nat-20
     )
+
+
+def roll_damage_crit(damage_list: list[dict]) -> list[tuple[dict, "DiceResult", "DiceResult"]]:
+    """
+    Roll each damage entry TWICE (crit rule) and return both rolls.
+    The embed picks the higher total per source to display.
+
+    Lancer crit rule:
+        Roll all damage dice twice, keep the highest result from each source.
+        e.g. 2d6 -> roll 4d6, pick the 2 highest individual dice.
+        Flat modifiers are NOT doubled - only the dice portion is re-rolled.
+    """
+    results = []
+    for d in damage_list:
+        val = str(d.get("val", "0"))
+        dtype = d.get("type", "?")
+        roll_a = roll_expression(val, label=dtype)
+        roll_b = roll_expression(val, label=dtype)
+        results.append((d, roll_a, roll_b))
+    return results
 
 
 def find_dice_in_text(text: str) -> list[re.Match]:

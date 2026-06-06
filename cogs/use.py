@@ -21,6 +21,7 @@ from utils.dice import (
     roll_expression,
     roll_accuracy,
     roll_attack,
+    roll_damage_crit,
     roll_all_dice_in_text,
     DiceResult,
     AttackRollResult,
@@ -72,36 +73,14 @@ def _all_items(mech) -> list[Weapon | System]:
 
 # ── damage roll helpers ───────────────────────────────────────────────────────
 
-def _roll_damage(
-    damage_list: list[dict],
-    crit: bool = False,
-) -> list[tuple[dict, DiceResult, DiceResult | None]]:
-    """
-    Returns:
-        (damage_dict, chosen_roll, discarded_roll)
-    """
+def _roll_damage(damage_list: list[dict]) -> list[tuple[dict, DiceResult]]:
+    """Roll each damage entry and return (damage_dict, DiceResult) pairs."""
     results = []
-
     for d in damage_list:
         val = str(d.get("val", "0"))
         dtype = d.get("type", "?")
-
-        first = roll_expression(val, label=dtype)
-
-        if crit:
-            second = roll_expression(val, label=dtype)
-
-            if second.total > first.total:
-                chosen = second
-                discarded = first
-            else:
-                chosen = first
-                discarded = second
-
-            results.append((d, chosen, discarded))
-        else:
-            results.append((d, first, None))
-
+        result = roll_expression(val, label=dtype)
+        results.append((d, result))
     return results
 
 
@@ -314,8 +293,14 @@ def build_weapon_use_embed(
     self_heat_rolls: list[DiceResult],
     accuracy: int,
     difficulty: int,
+    crit_both: list | None = None,
 ) -> discord.Embed:
-    """Full weapon-use embed: attack roll + damage + self-heat."""
+    """Full weapon-use embed: attack roll + damage + self-heat.
+
+    crit_both: list of (damage_dict, winner_roll, loser_roll) when a crit
+               occurred — used to show both rolls so the player can see the
+               dice doubling. Pass None on a normal hit.
+    """
     embed = discord.Embed(
         title=f"⚔️ {weapon.name}",
         color=_item_color(weapon),
@@ -343,25 +328,36 @@ def build_weapon_use_embed(
     attack_lines.append(f"**Attack Total: {attack.total}**{crit_str}")
     embed.add_field(name="🎯 Attack Roll", value="\n".join(attack_lines), inline=False)
 
-    # Damage
-    if damage_rolls:
+    # Damage — crit path shows both rolls, normal path shows one
+    if crit_both:
+        # Crit: show each source with both dice rolls, highlight the winner
         dmg_lines = []
-        for d, r, chosen, discarded in damage_rolls:
+        for d, winner, loser in crit_both:
+            ap = " **AP**" if d.get("ap") else ""
+            target = " *(self)*" if d.get("target") == "self" else ""
+            aoe_str = " *(AOE)*" if d.get("aoe") else ""
+
+            def _fmt_roll(r: DiceResult) -> str:
+                rolls_str = " + ".join(str(x) for x in r.rolls) if r.rolls else str(r.modifier)
+                mod_str = f" + {r.modifier}" if r.modifier and r.rolls else ""
+                return f"[{rolls_str}]{mod_str} = {r.total}"
+
+            w_str = _fmt_roll(winner)
+            l_str = _fmt_roll(loser)
+            dmg_lines.append(
+                f"**{winner.label}**{ap}{target}{aoe_str}:\n"
+                f"  Roll 1: {w_str} ✅  |  Roll 2: {l_str}\n"
+                f"  **Kept: {winner.total}**"
+            )
+        embed.add_field(name="💥 Damage (CRIT — doubled dice, kept highest)", value="\n".join(dmg_lines), inline=False)
+    elif damage_rolls:
+        dmg_lines = []
+        for d, r in damage_rolls:
             ap = " **AP**" if d.get("ap") else ""
             target = " *(self)*" if d.get("target") == "self" else ""
             aoe_str = " *(AOE)*" if d.get("aoe") else ""
             rolls_str = " + ".join(str(x) for x in r.rolls) if r.rolls else str(r.modifier)
             mod_str = f" + {r.modifier}" if r.modifier and r.rolls else ""
-            if discarded:
-                dmg_lines.append(
-                    f"**{chosen.label}**{ap}{target}{aoe_str}: "
-                    f"Crit [{chosen.total} vs {discarded.total}] → **{chosen.total}**"
-                )
-            else:
-                dmg_lines.append(
-                    f"**{chosen.label}**{ap}{target}{aoe_str}: "
-                    f"[{rolls_str}]{mod_str} = **{chosen.total}**"
-                )
             dmg_lines.append(
                 f"**{r.label}**{ap}{target}{aoe_str}: [{rolls_str}]{mod_str} = **{r.total}**"
             )
@@ -489,27 +485,20 @@ class UseCog(commands.Cog, name="action"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
-
     def _parse_acc_diff(self, args: tuple[str, ...]) -> tuple[int, int]:
         """
         Parse accuracy / difficulty flags from extra args.
-        Supported forms:
-          acc 2   a2   acc2   accuracy 2
-          diff 1  d1   diff1  difficulty 1
+        Supported forms: acc 2 | a2 | accuracy 2 | diff 1 | d1 | difficulty 1
         """
+        import re as _re
         acc, diff = 0, 0
         text = " ".join(args).lower()
-
-        acc_m = re.search(r"\b(?:acc(?:uracy)?)\s*(\d+)", text)
-        diff_m = re.search(r"\b(?:diff(?:iculty)?)\s*(\d+)", text)
-        # short form: a2 or d3
+        acc_m = _re.search(r"\b(?:acc(?:uracy)?)\s*(\d+)", text)
+        diff_m = _re.search(r"\b(?:diff(?:iculty)?)\s*(\d+)", text)
         if not acc_m:
-            acc_m = re.search(r"\ba(\d+)\b", text)
+            acc_m = _re.search(r"\ba(\d+)\b", text)
         if not diff_m:
-            diff_m = re.search(r"\bd(\d+)\b", text)
-
+            diff_m = _re.search(r"\bd(\d+)\b", text)
         if acc_m:
             acc = int(acc_m.group(1))
         if diff_m:
@@ -517,60 +506,12 @@ class UseCog(commands.Cog, name="action"):
         return acc, diff
 
     def _parse_item_name(self, args: tuple[str, ...]) -> str:
-        """
-        Strip accuracy/difficulty tokens from args and return the item name.
-        """
+        """Strip accuracy/difficulty tokens from args and return the item name."""
+        import re as _re
         text = " ".join(args)
-        # Remove acc/diff tokens
-        text = re.sub(r"\b(?:acc(?:uracy)?|diff(?:iculty)?)\s*\d+", "", text, flags=re.IGNORECASE)
-        text = re.sub(r"\b[ad]\d+\b", "", text)
+        text = _re.sub(r"\b(?:acc(?:uracy)?|diff(?:iculty)?)\s*\d+", "", text, flags=_re.IGNORECASE)
+        text = _re.sub(r"\b[ad]\d+\b", "", text)
         return text.strip()
-
-    def _update_current_stat(
-            self,
-            guild_id: int,
-            user_id: int,
-            stat: str,
-            delta: int,
-    ):
-        import json
-
-        raw = storage.load_raw(guild_id, user_id)
-        if not raw:
-            return None
-
-        data = json.loads(raw)
-
-        mech = data["data"]["mechs"][0]
-        current = mech["stats"]["current"]
-
-        old_value = current.get(stat, 0)
-
-        if stat == "hp":
-            max_value = mech["stats"]["max"].get("hp", old_value)
-            new_value = max(
-                0,
-                min(max_value, old_value + delta)
-            )
-        else:
-            heatcap = mech["stats"]["max"].get("heatcap", 99)
-            new_value = max(
-                0,
-                min(heatcap, old_value + delta)
-            )
-
-        current[stat] = new_value
-
-        char = storage.load(guild_id, user_id)
-
-        storage.save_raw(
-            guild_id,
-            user_id,
-            char.pilot.callsign,
-            json.dumps(data),
-        )
-
-        return old_value, new_value
 
     async def _resolve_item(
         self,
@@ -707,125 +648,6 @@ class UseCog(commands.Cog, name="action"):
                     accuracy,
                     difficulty,
                 )
-
-    @commands.command(name="hp")
-    async def hp_command(
-            self,
-            ctx: commands.Context,
-            amount: int = None
-    ):
-        """
-        Examples:
-            !hp
-            !hp -5
-            !hp +3
-        """
-
-        char = storage.load(
-            ctx.guild.id,
-            ctx.author.id,
-        )
-
-        if not char or not char.active_mech:
-            await ctx.reply(
-                "❌ No character imported.",
-                mention_author=False,
-            )
-            return
-
-        if amount is None:
-            current = char.active_mech.current_hp
-            maximum = char.active_mech.stats.hp
-
-            await ctx.reply(
-                f"❤️ HP: **{current}/{maximum}**",
-                mention_author=False,
-            )
-            return
-
-        result = self._update_current_stat(
-            ctx.guild.id,
-            ctx.author.id,
-            "hp",
-            amount,
-        )
-
-        if result is None:
-            await ctx.reply(
-                "❌ Could not update HP.",
-                mention_author=False,
-            )
-            return
-
-        old_hp, new_hp = result
-
-        await ctx.reply(
-            f"❤️ HP: **{old_hp} → {new_hp}** ({amount:+d})",
-            mention_author=False,
-        )
-
-    @commands.command(name="heat")
-    async def heat_command(
-            self,
-            ctx: commands.Context,
-            amount: int = None
-    ):
-        """
-        Examples:
-            !heat
-            !heat +2
-            !heat -4
-        """
-
-        char = storage.load(
-            ctx.guild.id,
-            ctx.author.id,
-        )
-
-        if not char or not char.active_mech:
-            await ctx.reply(
-                "❌ No character imported.",
-                mention_author=False,
-            )
-            return
-
-        if amount is None:
-            current = char.active_mech.current_heat
-            cap = char.active_mech.stats.heatcap
-
-            await ctx.reply(
-                f"🔥 Heat: **{current}/{cap}**",
-                mention_author=False,
-            )
-            return
-
-        result = self._update_current_stat(
-            ctx.guild.id,
-            ctx.author.id,
-            "heat",
-            amount,
-        )
-
-        if result is None:
-            await ctx.reply(
-                "❌ Could not update Heat.",
-                mention_author=False,
-            )
-            return
-
-        old_heat, new_heat = result
-
-        danger_zone = (
-                new_heat >= char.active_mech.stats.heatcap // 2
-        )
-
-        dz = " 🌡️ DANGER ZONE" if danger_zone else ""
-
-        await ctx.reply(
-            f"🔥 Heat: **{old_heat} → {new_heat}** ({amount:+d}){dz}",
-            mention_author=False,
-        )
-
     # ── Internal use logic ────────────────────────────────────────────────────
 
     async def _use_weapon(
@@ -837,42 +659,48 @@ class UseCog(commands.Cog, name="action"):
         difficulty,
     ):
         grit = char.pilot.stats.grit
-
         attack = roll_attack(grit, accuracy, difficulty)
 
-        damage_rolls = _roll_damage(
-            weapon.damage,
-            crit=attack.crit,
-        )
+        # ── Crit damage (Lancer rule: total >= 20 → roll dice twice, keep highest per source) ──
+        if attack.crit:
+            crit_triples = roll_damage_crit(weapon.damage)  # [(d, roll_a, roll_b), ...]
+            # Pick the higher roll per source, build the normal damage_rolls list
+            damage_rolls = []
+            crit_both = []   # kept for display: (d, winner, loser)
+            for d, roll_a, roll_b in crit_triples:
+                winner, loser = (roll_a, roll_b) if roll_a.total >= roll_b.total else (roll_b, roll_a)
+                damage_rolls.append((d, winner))
+                crit_both.append((d, winner, loser))
+        else:
+            damage_rolls = _roll_damage(weapon.damage)
+            crit_both = None
 
         self_heat_rolls = _total_self_heat(weapon)
 
         target_hp_dmg = sum(
-            r.total for d, r, _ in damage_rolls
+            r.total for d, r in damage_rolls
             if d.get("target") != "self"
             and d.get("type", "").lower() != "heat"
         )
-
         target_heat = sum(
-            r.total for d, r, _ in damage_rolls
+            r.total for d, r in damage_rolls
             if d.get("target") != "self"
             and d.get("type", "").lower() == "heat"
         )
-
         self_hp_dmg = sum(
-            r.total for d, r, _ in damage_rolls
+            r.total for d, r in damage_rolls
             if d.get("target") == "self"
             and d.get("type", "").lower() != "heat"
         )
-
         self_heat = (
             sum(r.total for r in self_heat_rolls)
             + sum(
-                r.total for d, r, _ in damage_rolls
+                r.total for d, r in damage_rolls
                 if d.get("target") == "self"
                 and d.get("type", "").lower() == "heat"
             )
         )
+
         embed = build_weapon_use_embed(
             char,
             weapon,
@@ -880,12 +708,20 @@ class UseCog(commands.Cog, name="action"):
             damage_rolls,
             self_heat_rolls,
             accuracy,
-            difficulty
+            difficulty,
+            crit_both=crit_both,
         )
-        
-        view = HeatHPView(guild_id=ctx.guild.id, user_id=ctx.author.id, hp_damage=target_hp_dmg, heat_gain=target_heat, self_hp_damage=self_hp_dmg, self_heat_gain=self_heat)
-        
-        await ctx.reply(embed=embed, view=view)
+        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
+
+        view = HeatHPView(
+            guild_id=ctx.guild.id,
+            user_id=ctx.author.id,
+            hp_damage=target_hp_dmg,
+            heat_gain=target_heat,
+            self_hp_damage=self_hp_dmg,
+            self_heat_gain=self_heat,
+        )
+        await ctx.reply(embed=embed, view=view, mention_author=False)
         
 
     async def _use_system(

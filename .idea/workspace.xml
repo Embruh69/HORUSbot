@@ -8,8 +8,7 @@
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cogs/use.py" beforeDir="false" afterPath="$PROJECT_DIR$/cogs/use.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/utils/dice.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/dice.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/embeds.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/embeds.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/parser.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/parser.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/use.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
