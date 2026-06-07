@@ -42,6 +42,7 @@ async def on_ready():
 async def setup_hook():
     await bot.load_extension("cogs.character")
     await bot.load_extension("cogs.use")
+    await bot.load_extension("cogs.encounter")
 
 
 # ── Run ───────────────────────────────────────────────────────────────────────
