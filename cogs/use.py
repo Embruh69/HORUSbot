@@ -28,6 +28,14 @@ from utils.dice import (
     AccuracyResult,
 )
 import utils.storage as storage
+from utils.lancer_checks import (
+    roll_structure_check,
+    roll_stress_check,
+    attach_cascade,
+    _nhp_names,
+    StructureResult,
+    StressResult,
+)
 
 # ── colour constants ──────────────────────────────────────────────────────────
 DAMAGE_COLORS = {
@@ -191,51 +199,227 @@ class HeatHPView(discord.ui.View):
 
     @discord.ui.button(label="Apply self HP", style=discord.ButtonStyle.danger, row=1)
     async def apply_self_hp(self, interaction: discord.Interaction, button: discord.ui.Button):
+        import json as _json
         char = storage.load(self.guild_id, self.user_id)
         if not char or not char.active_mech:
             await interaction.response.send_message("❌ Character not found.", ephemeral=True)
             return
-        # Update raw JSON in DB — re-load, mutate, re-save
-        raw = storage.load_raw(self.guild_id, self.user_id)
-        import json
-        data = json.loads(raw)
-        mech_data = data["data"]["mechs"][0]
-        cur = mech_data["stats"]["current"]
-        old_hp = cur.get("hp", char.active_mech.stats.hp)
-        new_hp = max(0, old_hp - self.self_hp_damage)
-        cur["hp"] = new_hp
-        storage.save_raw(self.guild_id, self.user_id, char.pilot.callsign, json.dumps(data))
-        button.disabled = True
-        await interaction.response.send_message(
-            f"❤️ Your HP: **{old_hp}** → **{new_hp}** (−{self.self_hp_damage})",
-            ephemeral=False,
-        )
-        self.stop()
 
-    @discord.ui.button(label="+Self Heat", style=discord.ButtonStyle.primary, row=1)
-    async def apply_self_heat(self, interaction: discord.Interaction, button: discord.ui.Button):
-        char = storage.load(self.guild_id, self.user_id)
-        if not char or not char.active_mech:
-            await interaction.response.send_message("❌ Character not found.", ephemeral=True)
-            return
         raw = storage.load_raw(self.guild_id, self.user_id)
-        import json
-        data = json.loads(raw)
+        data = _json.loads(raw)
         mech_data = data["data"]["mechs"][0]
         cur = mech_data["stats"]["current"]
         ms = char.active_mech.stats
-        old_heat = cur.get("heat", 0)
-        new_heat = min(ms.heatcap, old_heat + self.self_heat_gain)
-        cur["heat"] = new_heat
-        storage.save_raw(self.guild_id, self.user_id, char.pilot.callsign, json.dumps(data))
+
+        old_hp = cur.get("hp", ms.hp)
+        new_hp = old_hp - self.self_hp_damage
+        overflow = max(0, -new_hp)    # damage past 0 HP
+
+        structure_result: StructureResult | None = None
+
+        if new_hp <= 0 and ms.current_structure > 0:
+            # ── Structure check triggered ──────────────────────────────────
+            struct_result = roll_structure_check(
+                structure_before=cur.get("structure", ms.structure),
+                max_structure=ms.structure,
+                hp_overflow=overflow,
+            )
+            attach_cascade(struct_result, char.active_mech)
+            structure_result = struct_result
+
+            # Structure check: reset HP to max then apply overflow damage
+            new_structure = max(0, struct_result.structure_after)
+            cur["structure"] = new_structure
+            # HP resets to max on structure loss, then overflow comes off that
+            cur["hp"] = max(0, ms.hp - overflow) if new_structure > 0 else 0
+        else:
+            cur["hp"] = max(0, new_hp)
+
+        storage.save_raw(self.guild_id, self.user_id, char.pilot.callsign, _json.dumps(data))
         button.disabled = True
-        danger_zone = new_heat >= (ms.heatcap // 2)
-        dz_str = " 🌡️ **DANGER ZONE!**" if danger_zone else ""
-        await interaction.response.send_message(
-            f"🔥 Your Heat: **{old_heat}** → **{new_heat}**/{ms.heatcap} (+{self.self_heat_gain}){dz_str}",
-            ephemeral=False,
-        )
         self.stop()
+
+        # ── Acknowledge the interaction first ─────────────────────────────
+        await interaction.response.defer()
+
+        # ── HP update message ─────────────────────────────────────────────
+        if structure_result:
+            hp_msg = (
+                f"❤️ HP: **{old_hp}** → **0** (−{self.self_hp_damage})"
+                + (f"  · overflow: **{overflow}**" if overflow else "")
+            )
+        else:
+            hp_msg = f"❤️ HP: **{old_hp}** → **{max(0,new_hp)}** (−{self.self_hp_damage})"
+
+        await interaction.followup.send(hp_msg)
+
+        # ── Structure check embed ─────────────────────────────────────────
+        if structure_result:
+            embed = _build_structure_embed(structure_result, char.active_mech)
+            await interaction.followup.send(embed=embed)
+
+    @discord.ui.button(label="+Self Heat", style=discord.ButtonStyle.primary, row=1)
+    async def apply_self_heat(self, interaction: discord.Interaction, button: discord.ui.Button):
+        import json as _json
+        char = storage.load(self.guild_id, self.user_id)
+        if not char or not char.active_mech:
+            await interaction.response.send_message("❌ Character not found.", ephemeral=True)
+            return
+
+        raw = storage.load_raw(self.guild_id, self.user_id)
+        data = _json.loads(raw)
+        mech_data = data["data"]["mechs"][0]
+        cur = mech_data["stats"]["current"]
+        ms = char.active_mech.stats
+
+        old_heat = cur.get("heat", 0)
+        new_heat_raw = old_heat + self.self_heat_gain
+        overflow = max(0, new_heat_raw - ms.heatcap)   # heat past cap
+
+        stress_result: StressResult | None = None
+
+        # Stress triggers when heat EXCEEDS (not just meets) heatcap
+        if new_heat_raw > ms.heatcap and cur.get("stress", ms.stress) > 0:
+            # ── Stress check triggered ─────────────────────────────────────
+            s_result = roll_stress_check(
+                stress_before=cur.get("stress", ms.stress),
+                max_stress=ms.stress,
+                heat_overflow=overflow,
+            )
+            attach_cascade(s_result, char.active_mech)
+            stress_result = s_result
+
+            # Reset heat to 0, store overflow so caller can see it
+            new_stress = max(0, s_result.stress_after)
+            cur["stress"] = new_stress
+            cur["heat"] = overflow   # carry overflow heat into next round
+        else:
+            cur["heat"] = min(ms.heatcap, new_heat_raw)
+
+        storage.save_raw(self.guild_id, self.user_id, char.pilot.callsign, _json.dumps(data))
+        button.disabled = True
+        self.stop()
+
+        await interaction.response.defer()
+
+        # ── Heat update message ───────────────────────────────────────────
+        final_heat = cur["heat"]
+        if stress_result:
+            heat_msg = (
+                f"🔥 Heat: **{old_heat}** → **{ms.heatcap}** (OVERLOAD!)"
+                + (f"  · overflow: **{overflow}** carried forward" if overflow else "")
+            )
+        else:
+            danger_zone = final_heat >= (ms.heatcap // 2)
+            dz_str = "  🌡️ **DANGER ZONE!**" if danger_zone else ""
+            heat_msg = f"🔥 Heat: **{old_heat}** → **{final_heat}**/{ms.heatcap} (+{self.self_heat_gain}){dz_str}"
+
+        await interaction.followup.send(heat_msg)
+
+        # ── Stress check embed ────────────────────────────────────────────
+        if stress_result:
+            embed = _build_stress_embed(stress_result, char.active_mech)
+            await interaction.followup.send(embed=embed)
+
+
+# ── Structure / Stress embed builders ────────────────────────────────────────
+
+def _build_structure_embed(result: StructureResult, mech) -> discord.Embed:
+    """Build the structure-check result embed."""
+    color = 0x1A1A1A if result.destroyed else (0xFF5252 if result.lowest == 1 else 0xFF9800)
+    embed = discord.Embed(
+        title=f"🦾 Structure Check — {result.result_name}",
+        color=color,
+    )
+
+    # Dice pool
+    if result.dice_rolled:
+        dice_str = "  ".join(f"**{d}**" if d == result.lowest else str(d) for d in result.dice_rolled)
+        n = len(result.dice_rolled)
+        embed.add_field(
+            name=f"🎲 Rolled {n}d6 (lowest is worst)",
+            value=dice_str + "\n→ Kept: **" + str(result.lowest) + "**",
+            inline=False,
+        )
+
+    # Structure track
+    struct_pips = "█" * result.structure_after + "░" * (result.structure_before - result.structure_after)
+    if result.structure_before > 0:
+        embed.add_field(
+            name="🛡️ Structure",
+            value=f"`{struct_pips}` {result.structure_after}/{result.structure_before} → **{result.structure_after}**",
+            inline=True,
+        )
+
+    if result.hp_overflow:
+        embed.add_field(name="💢 HP Overflow", value=f"**{result.hp_overflow}** damage carries to next structure", inline=True)
+
+    # Result detail
+    embed.add_field(name="📋 Result", value=result.result_detail, inline=False)
+
+    # NHP cascade
+    if result.nhp_present:
+        if result.cascade_triggered:
+            embed.add_field(
+                name="NHP Cascade Check",
+                value=f"d20 roll: **{result.cascade_roll}** = 1  →  ⚠️ **CASCADE TRIGGERED!**\nYour NHP begins to cascade. Consult the GM.",
+                inline=False,
+            )
+        else:
+            embed.add_field(
+                name="NHP Cascade Check",
+                value=f"d20 roll: **{result.cascade_roll}** != 1  →  ✅ No cascade.",
+                inline=False,
+            )
+
+    return embed
+
+
+def _build_stress_embed(result: StressResult, mech) -> discord.Embed:
+    """Build the reactor stress check result embed."""
+    color = 0x9C27B0 if result.meltdown else (0xFF5252 if result.lowest == 1 else 0xFF9800)
+    embed = discord.Embed(
+        title=f"☢️ Reactor Stress Check — {result.result_name}",
+        color=color,
+    )
+
+    if result.dice_rolled:
+        dice_str = "  ".join(f"**{d}**" if d == result.lowest else str(d) for d in result.dice_rolled)
+        n = len(result.dice_rolled)
+        embed.add_field(
+            name=f"🎲 Rolled {n}d6 (lowest is worst)",
+            value=dice_str + "\n→ Kept: **" + str(result.lowest) + "**",
+            inline=False,
+        )
+
+    stress_pips = "█" * result.stress_after + "░" * (result.stress_before - result.stress_after)
+    if result.stress_before > 0:
+        embed.add_field(
+            name="⚛️ Reactor Stress",
+            value=f"`{stress_pips}` {result.stress_after}/{result.stress_before} → **{result.stress_after}**",
+            inline=True,
+        )
+
+    if result.heat_overflow:
+        embed.add_field(name="🌡️ Heat Overflow", value=f"**{result.heat_overflow}** heat carried forward", inline=True)
+
+    embed.add_field(name="📋 Result", value=result.result_detail, inline=False)
+
+    if result.nhp_present:
+        if result.cascade_triggered:
+            embed.add_field(
+                name="🤖 NHP Cascade Check",
+                value=f"d20 roll: **{result.cascade_roll}** ≤ 10  →  ⚠️ **CASCADE TRIGGERED!**\nYour NHP begins to cascade. Consult the GM.",
+                inline=False,
+            )
+        else:
+            embed.add_field(
+                name="🤖 NHP Cascade Check",
+                value=f"d20 roll: **{result.cascade_roll}** > 10  →  ✅ No cascade.",
+                inline=False,
+            )
+
+    return embed
 
 
 class DisambiguateView(discord.ui.View):

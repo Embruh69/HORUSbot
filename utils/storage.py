@@ -4,11 +4,11 @@ SQLite-backed character store for the Lancer bot.
 Schema
 ------
 characters
-  guild_id   INTEGER  — Discord guild snowflake
-  user_id    INTEGER  — Discord user snowflake
-  callsign   TEXT     — for quick display / listing
-  raw_json   TEXT     — the full comp/con export JSON (re-parsed on load)
-  imported_at TEXT    — ISO-8601 timestamp
+  guild_id    INTEGER  — Discord guild snowflake
+  user_id     INTEGER  — Discord user snowflake
+  callsign    TEXT     — for quick display / listing
+  raw_json    TEXT     — the full comp/con export JSON (re-parsed on load)
+  imported_at TEXT     — ISO-8601 timestamp
 
 The raw comp/con JSON is stored verbatim so we never lose data and can
 re-parse whenever the parser is updated.
@@ -38,7 +38,7 @@ def _conn() -> sqlite3.Connection:
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         con = sqlite3.connect(DB_PATH, check_same_thread=False)
         con.row_factory = sqlite3.Row
-        con.execute("PRAGMA journal_mode=WAL")   # safer concurrent writes
+        con.execute("PRAGMA journal_mode=WAL")
         con.execute("PRAGMA foreign_keys=ON")
         _create_tables(con)
         _local.conn = con
@@ -62,10 +62,7 @@ def _create_tables(con: sqlite3.Connection) -> None:
 # ── public API ────────────────────────────────────────────────────────────────
 
 def save(guild_id: int, user_id: int, char: LancerCharacter, raw_json: str) -> None:
-    """
-    Persist a character.  Pass the original raw JSON string so we can
-    round-trip it perfectly without re-serialising our dataclasses.
-    """
+    """Persist a character with its original raw JSON."""
     now = datetime.now(timezone.utc).isoformat()
     con = _conn()
     con.execute(
@@ -93,18 +90,7 @@ def load(guild_id: int, user_id: int) -> Optional[LancerCharacter]:
     return parse_compcon_json(row["raw_json"])
 
 
-def delete(guild_id: int, user_id: int) -> bool:
-    """Delete a character; returns True if a row was removed."""
-    con = _conn()
-    cur = con.execute(
-        "DELETE FROM characters WHERE guild_id=? AND user_id=?",
-        (guild_id, user_id),
-    )
-    con.commit()
-    return cur.rowcount > 0
-
-
-def load_raw(guild_id: int, user_id: int) -> str | None:
+def load_raw(guild_id: int, user_id: int) -> Optional[str]:
     """Return the raw JSON string for a character, or None."""
     row = _conn().execute(
         "SELECT raw_json FROM characters WHERE guild_id=? AND user_id=?",
@@ -114,7 +100,7 @@ def load_raw(guild_id: int, user_id: int) -> str | None:
 
 
 def save_raw(guild_id: int, user_id: int, callsign: str, raw_json: str) -> None:
-    """Overwrite the stored JSON (used by HP/heat mutation buttons)."""
+    """Overwrite the stored JSON (used by HP/heat mutation)."""
     now = datetime.now(timezone.utc).isoformat()
     con = _conn()
     con.execute(
@@ -129,11 +115,21 @@ def save_raw(guild_id: int, user_id: int, callsign: str, raw_json: str) -> None:
         (guild_id, user_id, callsign, raw_json, now),
     )
     con.commit()
-    """
-    Return a list of dicts with 'user_id', 'callsign', 'imported_at'
-    for every character registered in a guild.  Useful for future
-    admin/listing commands.
-    """
+
+
+def delete(guild_id: int, user_id: int) -> bool:
+    """Delete a character; returns True if a row was removed."""
+    con = _conn()
+    cur = con.execute(
+        "DELETE FROM characters WHERE guild_id=? AND user_id=?",
+        (guild_id, user_id),
+    )
+    con.commit()
+    return cur.rowcount > 0
+
+
+def list_guild(guild_id: int) -> list[dict]:
+    """Return all characters registered in a guild (user_id, callsign, imported_at)."""
     rows = _conn().execute(
         "SELECT user_id, callsign, imported_at FROM characters WHERE guild_id=? ORDER BY callsign",
         (guild_id,),
