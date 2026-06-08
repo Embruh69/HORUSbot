@@ -12,6 +12,15 @@ Key differences from pilot JSON
 • Features have types: Weapon | System | Trait | Tech | Reaction.
 • HP, heat, etc. come from combat_data.stats.max (already computed for the
   selected tier by comp/con).
+
+Template bonus stats (REINFORCED, RESILIENT, etc.)
+────────────────────────────────────────────────────
+comp/con stores the *base* class stats in combat_data.stats.max — template
+trait bonuses such as "+3 Structure" (REINFORCED) or "+5 HP" (RESILIENT) are
+stored only as plain-English text in the trait effects and are NOT pre-applied
+to the max block.  parse_npc_json calls _apply_trait_stat_bonuses() after
+parsing to scan every feature effect for these patterns and add them to the
+parsed stats so structure/stress/HP reflect the real playable values.
 """
 from __future__ import annotations
 import json
@@ -221,6 +230,116 @@ def _parse_npc_stats(combat_data: dict) -> NpcStats:
     )
 
 
+# Matches "+N <StatName>" in trait/system effect text.
+# Handles optional "and" chaining: "+3 Structure and +3 Stress"
+import re as _re
+_STAT_BONUS_RE = _re.compile(
+    r"\+(\d+)\s+(Structure|Stress|HP|Max HP|Heatcap|Heat Cap|Speed|Armor|Evasion|E-Defense|Save(?:\s+Target)?)",
+    _re.IGNORECASE,
+)
+
+_STAT_NAME_MAP = {
+    "structure":    "structure",
+    "stress":       "stress",
+    "hp":           "hp",
+    "max hp":       "hp",
+    "heatcap":      "heatcap",
+    "heat cap":     "heatcap",
+    "speed":        "speed",
+    "armor":        "armor",
+    "evasion":      "evasion",
+    "e-defense":    "edef",
+    "save":         "save_target",
+    "save target":  "save_target",
+}
+
+
+def _apply_trait_stat_bonuses(stats: "NpcStats", features: list[dict]) -> None:
+    """
+    Scan every feature effect for "+N <Stat>" patterns and apply them to
+    the NpcStats object in-place.
+
+    This compensates for comp/con storing only the base class values in
+    combat_data.stats.max — template traits like REINFORCED (+3 Structure
+    +3 Stress) and RESILIENT (+5 HP) are recorded only as effect text.
+
+    Rules
+    ─────
+    • Only Trait and System features are scanned (Weapons don't grant stats).
+    • Each bonus is applied once — duplicate feature names are deduplicated
+      so importing the same JSON twice doesn't double-count.
+    • After adjusting max values, current_structure and current_stress are
+      re-clamped to the new max (a freshly imported NPC starts at full
+      structure/stress; one loaded from DB already has correct current values
+      stored separately and won't be affected by re-parsing).
+    • current_hp is NOT touched here because the DB stores it separately;
+      the max HP increase is stored in stats.hp so the bar renders correctly.
+    """
+    seen_names: set[str] = set()
+
+    # Snapshot the pre-bonus maxima so we can tell whether current values
+    # were at "full" (equal to old max) and should be bumped to the new max,
+    # or were already reduced (damaged) and should stay as-is.
+    old_structure = stats.structure
+    old_stress    = stats.stress
+
+    for feature in features:
+        fd = feature.get("data", {})
+        ftype = fd.get("type", "")
+        if ftype not in ("Trait", "System"):
+            continue
+
+        name = fd.get("name", "")
+        if name in seen_names:
+            continue
+        seen_names.add(name)
+
+        effect = _clean_html(fd.get("effect", "") or "")
+        if not effect:
+            continue
+
+        for m in _STAT_BONUS_RE.finditer(effect):
+            amount   = int(m.group(1))
+            raw_stat = m.group(2).lower().strip()
+            stat_key = _STAT_NAME_MAP.get(raw_stat)
+            if stat_key is None:
+                continue
+
+            if stat_key == "structure":
+                stats.structure        += amount
+            elif stat_key == "stress":
+                stats.stress           += amount
+            elif stat_key == "hp":
+                stats.hp               += amount
+            elif stat_key == "heatcap":
+                stats.heatcap          += amount
+            elif stat_key == "speed":
+                stats.speed            += amount
+            elif stat_key == "armor":
+                stats.armor            += amount
+            elif stat_key == "evasion":
+                stats.evasion          += amount
+            elif stat_key == "edef":
+                stats.edef             += amount
+            elif stat_key == "save_target":
+                stats.save_target      += amount
+
+    # Sync current values to the new maxima:
+    # • If current == old max → NPC was at full health; bump to new max.
+    # • If current < old max  → NPC was damaged (DB-loaded); leave it alone,
+    #   but clamp to new max in case a future re-import somehow stored a value
+    #   higher than the new max (shouldn't happen, but defensive).
+    if stats.current_structure == old_structure:
+        stats.current_structure = stats.structure
+    else:
+        stats.current_structure = min(stats.current_structure, stats.structure)
+
+    if stats.current_stress == old_stress:
+        stats.current_stress = stats.stress
+    else:
+        stats.current_stress = min(stats.current_stress, stats.stress)
+
+
 # ─── Main entry point ─────────────────────────────────────────────────────────
 
 def parse_npc_json(raw: str | bytes | dict, display_name: str | None = None) -> NpcEnemy:
@@ -257,6 +376,11 @@ def parse_npc_json(raw: str | bytes | dict, display_name: str | None = None) -> 
 
     combat_data = data.get("combat_data", {})
     stats = _parse_npc_stats(combat_data)
+
+    # Apply stat bonuses from trait/system effects (e.g. REINFORCED, RESILIENT).
+    # Must happen before the NpcEnemy is constructed so the corrected values
+    # propagate to current_structure / current_stress clamping.
+    _apply_trait_stat_bonuses(stats, data.get("features", []))
 
     weapons: list[NpcWeapon] = []
     systems: list[NpcSystem] = []
