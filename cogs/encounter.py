@@ -3,21 +3,21 @@ Encounter cog — GM commands for managing NPC enemies.
 
 Command surface
 ───────────────
-!npc add [-qty N]             — attach 1+ NPC JSON files
-!npc list                     — encounter roster
-!npc show <name>              — full statblock
-!npc activate [name…]         — mark enemies active (interactive or by name)
-!npc deactivate               — clear active markers
-!npc hp <name> [amount]       — adjust/show HP
-!npc heat <name> [amount]     — adjust/show heat
-!npc kill <name>              — mark destroyed
-!npc fr <name>                — full repair
-!npc clear                    — wipe encounter
+!npc add [-qty N] — attach 1+ NPC JSON files
+!npc list — encounter roster
+!npc show <name> — full statblock
+!npc activate [name…] — mark enemies active (interactive or by name)
+!npc deactivate — clear active markers
+!npc hp <name> [amount] — adjust/show HP
+!npc heat <name> [amount] — adjust/show heat
+!npc kill <name> — mark destroyed
+!npc fr <name> — full repair
+!npc clear — wipe encounter
 
-!npca <enemy> [feature]       — use a weapon or system as an NPC
+!npca <enemy> [feature] — use a weapon or system as an NPC
   • No feature arg → interactive button picker of all features
   • Weapons → attack roll (1d20 + atk_bonus ± accuracy) + damage
-  • Techs   → tech attack roll (1d20 + tech_attack ± accuracy) + effect
+  • Techs → tech attack roll (1d20 + tech_attack ± accuracy) + effect
   • Systems / Traits / Reactions → display effect, roll inline dice
   • Self-heat button on weapon/tech results to track NPC heat
 """
@@ -39,23 +39,23 @@ from utils.dice import roll_expression, roll_all_dice_in_text, DiceResult
 from utils.targeting import parse_target_flag, resolve_target, TargetResult
 
 MAX_ATTACHMENT_SIZE = 2 * 1024 * 1024
-MAX_FILES           = 10
+MAX_FILES = 10
 
 # ── Colour helpers ────────────────────────────────────────────────────────────
 
 DAMAGE_COLORS = {
-    "kinetic":   0x9E9E9E,
-    "energy":    0x2196F3,
+    "kinetic": 0x9E9E9E,
+    "energy": 0x2196F3,
     "explosive": 0xE8871A,
-    "burn":      0xFF5722,
-    "heat":      0xFF9800,
+    "burn": 0xFF5722,
+    "heat": 0xFF9800,
 }
 ROLE_COLORS = {
     "controller": 0x9C27B0,
-    "striker":    0xCF2020,
-    "artillery":  0xE8871A,
-    "defender":   0x2196F3,
-    "support":    0x4CAF50,
+    "striker": 0xCF2020,
+    "artillery": 0xE8871A,
+    "defender": 0x2196F3,
+    "support": 0x4CAF50,
 }
 DEFAULT_COLOR = 0x455A64
 
@@ -76,21 +76,21 @@ class NpcAttackResult:
                  "acc_kept", "acc_applied", "total", "crit")
 
     def __init__(self, attack_bonus: int, accuracy_dice: int):
-        self.d20          = random.randint(1, 20)
+        self.d20 = random.randint(1, 20)
         self.attack_bonus = attack_bonus
         self.accuracy_dice = accuracy_dice
 
         if accuracy_dice > 0:
-            self.acc_rolls   = [random.randint(1, 6) for _ in range(accuracy_dice)]
-            self.acc_kept    = max(self.acc_rolls)
+            self.acc_rolls = [random.randint(1, 6) for _ in range(accuracy_dice)]
+            self.acc_kept = max(self.acc_rolls)
             self.acc_applied = self.acc_kept
         else:
-            self.acc_rolls   = []
-            self.acc_kept    = 0
+            self.acc_rolls = []
+            self.acc_kept = 0
             self.acc_applied = 0
 
         self.total = self.d20 + self.attack_bonus + self.acc_applied
-        self.crit  = self.total >= 20
+        self.crit = self.total >= 20
 
 
 # ── Roll NPC damage ───────────────────────────────────────────────────────────
@@ -115,9 +115,9 @@ def _roll_npc_damage(
 
 def _progress_bar(current: int, maximum: int, length: int = 10) -> str:
     if maximum <= 0:
-        return "█" * length
+        return "█"* length
     filled = round(length * max(0, current) / maximum)
-    return "█" * max(0, min(filled, length)) + "░" * max(0, length - filled)
+    return "█"* max(0, min(filled, length)) + "░"* max(0, length - filled)
 
 
 # ── Embed builders ────────────────────────────────────────────────────────────
@@ -128,42 +128,43 @@ def _build_weapon_embed(
     attack: NpcAttackResult,
     dmg_results: list[tuple[dict, DiceResult, DiceResult | None]],
     target: "TargetResult | None" = None,
+    dmg_bonus: int = 0,
 ) -> discord.Embed:
     embed = discord.Embed(
-        title=f"⚔️ {enemy.display_name} — {weapon.name}",
+        title=f"{enemy.display_name} — {weapon.name}",
         color=_weapon_color(weapon),
     )
     embed.description = (
-        f"**{weapon.weapon_type}**  ·  Range: {weapon.range_str}  "
-        f"·  *{enemy.tag} {enemy.role.title()} T{enemy.tier}*"
+        f"**{weapon.weapon_type}** · Range: {weapon.range_str} "
+        f"· *{enemy.tag} {enemy.role.title()} T{enemy.tier}*"
     )
 
     # ── Target preview ────────────────────────────────────────────────────────
     if target:
         if target.kind == "player":
             embed.add_field(
-                name=f"🎯 Target: {target.label}",
+                name=f"Target: {target.label}",
                 value="Player — HP tracked on their sheet.",
                 inline=False,
             )
         else:
             bar = _progress_bar(target.npc_hp, target.npc_max_hp)
             embed.add_field(
-                name=f"🎯 Target: {target.label}",
-                value=f"❤️ `{bar}` {target.npc_hp}/{target.npc_max_hp} HP",
+                name=f"Target: {target.label}",
+                value=f" `{bar}` {target.npc_hp}/{target.npc_max_hp} HP",
                 inline=False,
             )
 
     # ── Attack roll ───────────────────────────────────────────────────────────
-    atk_lines = [f"🎲 **{attack.d20}** (d20) + **{attack.attack_bonus}** (Atk Bonus)"]
+    atk_lines = [f"**{attack.d20}** (d20) + **{attack.attack_bonus}** (Atk Bonus)"]
     if attack.acc_rolls:
         dice_str = ", ".join(str(r) for r in attack.acc_rolls)
         atk_lines.append(
-            f"🟢 Accuracy ({attack.accuracy_dice}d6: [{dice_str}] → kept **{attack.acc_kept}**) → +{attack.acc_applied}"
+            f"Accuracy ({attack.accuracy_dice}d6: [{dice_str}] → kept **{attack.acc_kept}**) → +{attack.acc_applied}"
         )
-    crit_str = "  🎯 **CRITICAL HIT!**" if attack.crit else ""
+    crit_str = "**CRITICAL HIT!**" if attack.crit else ""
     atk_lines.append(f"**Attack Total: {attack.total}**{crit_str}")
-    embed.add_field(name="🎯 Attack Roll", value="\n".join(atk_lines), inline=False)
+    embed.add_field(name="Attack Roll", value="\n".join(atk_lines), inline=False)
 
     # ── Damage ────────────────────────────────────────────────────────────────
     if dmg_results:
@@ -171,40 +172,42 @@ def _build_weapon_embed(
         if attack.crit:
             for d, r1, r2 in dmg_results:
                 winner = r1 if (r2 is None or r1.total >= r2.total) else r2
-                loser  = r2 if winner is r1 else r1
+                loser = r2 if winner is r1 else r1
 
                 def _fmt(r: DiceResult) -> str:
-                    rolls_str = " + ".join(str(x) for x in r.rolls) if r.rolls else str(r.modifier)
-                    mod_str = f" + {r.modifier}" if r.modifier and r.rolls else ""
+                    rolls_str = "+ ".join(str(x) for x in r.rolls) if r.rolls else str(r.modifier)
+                    mod_str = f"+ {r.modifier}" if r.modifier and r.rolls else ""
                     return f"[{rolls_str}]{mod_str} = {r.total}"
 
                 dmg_lines.append(
                     f"**{winner.label}**: "
-                    f"Roll 1: {_fmt(winner)} ✅  |  Roll 2: {_fmt(loser)}\n"
-                    f"  **Kept: {winner.total}**"
+                    f"Roll 1: {_fmt(winner)} | Roll 2: {_fmt(loser)}\n"
+                    f"**Kept: {winner.total}**"
                 )
             embed.add_field(
-                name="💥 Damage (CRIT — doubled dice, keep highest)",
+                name="Damage (CRIT — doubled dice, keep highest)",
                 value="\n".join(dmg_lines),
                 inline=False,
             )
         else:
             for d, r1, _ in dmg_results:
-                rolls_str = " + ".join(str(x) for x in r1.rolls) if r1.rolls else str(r1.modifier)
-                mod_str = f" + {r1.modifier}" if r1.modifier and r1.rolls else ""
+                rolls_str = "+ ".join(str(x) for x in r1.rolls) if r1.rolls else str(r1.modifier)
+                mod_str = f"+ {r1.modifier}" if r1.modifier and r1.rolls else ""
                 dmg_lines.append(f"**{r1.label}**: [{rolls_str}]{mod_str} = **{r1.total}**")
-            embed.add_field(name="💥 Damage", value="\n".join(dmg_lines), inline=False)
+            if dmg_bonus:
+                dmg_lines.append(f"**Bonus**: +{dmg_bonus} (manual)")
+            embed.add_field(name="Damage", value="\n".join(dmg_lines), inline=False)
 
     # ── On Hit / Effect ───────────────────────────────────────────────────────
     if weapon.on_hit:
-        embed.add_field(name="✅ On Hit", value=weapon.on_hit[:500], inline=False)
+        embed.add_field(name="On Hit", value=weapon.on_hit[:500], inline=False)
     if weapon.effect:
-        embed.add_field(name="📋 Effect", value=weapon.effect[:500], inline=False)
+        embed.add_field(name="Effect", value=weapon.effect[:500], inline=False)
 
     # ── Tags ──────────────────────────────────────────────────────────────────
     if weapon.tags:
         embed.add_field(
-            name="🏷️ Tags",
+            name="Tags",
             value=", ".join(format_tag(t) for t in weapon.tags),
             inline=True,
         )
@@ -215,15 +218,15 @@ def _build_weapon_embed(
     if heat_self:
         bar = _progress_bar(s.current_heat, s.heatcap)
         embed.add_field(
-            name="🌡️ Self Heat",
-            value=f"**+{heat_self}** self heat  ·  Current: `{bar}` {s.current_heat}/{s.heatcap}",
+            name="Self Heat",
+            value=f"**+{heat_self}** self heat · Current: `{bar}` {s.current_heat}/{s.heatcap}",
             inline=False,
         )
 
     embed.set_footer(
         text=f"{enemy.display_name}"
-             + (f"  →  {target.label}" if target else "")
-             + "  ·  Use the button below to apply"
+             + (f" → {target.label}" if target else "")
+             + " · Use the button below to apply"
     )
     return embed
 
@@ -234,13 +237,14 @@ def _build_tech_embed(
     attack: NpcAttackResult,
     annotated_text: str,
     target: "TargetResult | None" = None,
+    dmg_bonus: int = 0,
 ) -> discord.Embed:
     embed = discord.Embed(
-        title=f"💻 {enemy.display_name} — {system.name}",
+        title=f"{enemy.display_name} — {system.name}",
         color=0x7E57C2,
     )
     embed.description = (
-        f"**{system.tech_type or 'Quick'} Tech**  ·  "
+        f"**{system.tech_type or 'Quick'} Tech** · "
         f"*{enemy.tag} {enemy.role.title()} T{enemy.tier}*"
     )
 
@@ -248,42 +252,45 @@ def _build_tech_embed(
     if target:
         if target.kind == "player":
             embed.add_field(
-                name=f"🎯 Target: {target.label}",
+                name=f"Target: {target.label}",
                 value="Player — HP tracked on their sheet.",
                 inline=False,
             )
         else:
             bar = _progress_bar(target.npc_hp, target.npc_max_hp)
             embed.add_field(
-                name=f"🎯 Target: {target.label}",
-                value=f"❤️ `{bar}` {target.npc_hp}/{target.npc_max_hp} HP",
+                name=f"Target: {target.label}",
+                value=f"`{bar}` {target.npc_hp}/{target.npc_max_hp} HP",
                 inline=False,
             )
 
     # Attack roll
-    atk_lines = [f"🎲 **{attack.d20}** (d20) + **{attack.attack_bonus}** (Tech Atk)"]
+    atk_lines = [f"**{attack.d20}** (d20) + **{attack.attack_bonus}** (Tech Atk)"]
     if attack.acc_rolls:
         dice_str = ", ".join(str(r) for r in attack.acc_rolls)
         atk_lines.append(
-            f"🟢 Accuracy ({attack.accuracy_dice}d6: [{dice_str}] → kept **{attack.acc_kept}**) → +{attack.acc_applied}"
+            f"Accuracy ({attack.accuracy_dice}d6: [{dice_str}] → kept **{attack.acc_kept}**) → +{attack.acc_applied}"
         )
-    crit_str = "  🎯 **CRITICAL!**" if attack.crit else ""
+    crit_str = "  **CRITICAL!**" if attack.crit else ""
     atk_lines.append(f"**Tech Attack Total: {attack.total}**{crit_str}")
-    embed.add_field(name="💻 Tech Attack", value="\n".join(atk_lines), inline=False)
+    embed.add_field(name="Tech Attack", value="\n".join(atk_lines), inline=False)
 
     if annotated_text:
-        embed.add_field(name="📋 Effect", value=annotated_text[:1000], inline=False)
+        embed.add_field(name="Effect", value=annotated_text[:1000], inline=False)
+
+    if dmg_bonus:
+        embed.add_field(name="Bonus Damage", value=f"+{dmg_bonus} (manual)", inline=True)
 
     if system.tags:
         embed.add_field(
-            name="🏷️ Tags",
+            name="Tags",
             value=", ".join(format_tag(t) for t in system.tags),
             inline=True,
         )
 
     embed.set_footer(
         text=f"{enemy.display_name}"
-             + (f"  →  {target.label}" if target else "")
+             + (f" → {target.label}" if target else "")
     )
     return embed
 
@@ -294,26 +301,26 @@ def _build_system_embed(
     annotated_text: str,
 ) -> discord.Embed:
     type_icons = {
-        "System":   "🔧",
-        "Trait":    "🧬",
+        "System": "",
+        "Trait": "",
         "Reaction": "↩️",
     }
-    icon = type_icons.get(system.system_type, "🔧")
+    icon = type_icons.get(system.system_type, "")
     embed = discord.Embed(
         title=f"{icon} {enemy.display_name} — {system.name}",
         color=_enemy_color(enemy),
     )
     embed.description = (
-        f"**{system.system_type}**  ·  "
+        f"**{system.system_type}** · "
         f"*{enemy.tag} {enemy.role.title()} T{enemy.tier}*"
     )
 
     if annotated_text:
-        embed.add_field(name="📋 Effect", value=annotated_text[:1000], inline=False)
+        embed.add_field(name="Effect", value=annotated_text[:1000], inline=False)
 
     if system.tags:
         embed.add_field(
-            name="🏷️ Tags",
+            name="Tags",
             value=", ".join(format_tag(t) for t in system.tags),
             inline=True,
         )
@@ -331,23 +338,23 @@ class FeaturePickerView(discord.ui.View):
     Up to 20 features shown (4 rows × 5), row 4 is cancel.
     """
     _TYPE_STYLE = {
-        "Weapon":   discord.ButtonStyle.danger,
-        "Tech":     discord.ButtonStyle.primary,
-        "System":   discord.ButtonStyle.secondary,
-        "Trait":    discord.ButtonStyle.secondary,
+        "Weapon": discord.ButtonStyle.danger,
+        "Tech": discord.ButtonStyle.primary,
+        "System": discord.ButtonStyle.secondary,
+        "Trait": discord.ButtonStyle.secondary,
         "Reaction": discord.ButtonStyle.secondary,
     }
     _TYPE_ICON = {
-        "Weapon":   "⚔️",
-        "Tech":     "💻",
-        "System":   "🔧",
-        "Trait":    "🧬",
+        "Weapon": "",
+        "Tech": "",
+        "System": "",
+        "Trait": "",
         "Reaction": "↩️",
     }
 
     def __init__(self, enemy: NpcEnemy, author_id: int):
         super().__init__(timeout=45)
-        self.enemy     = enemy
+        self.enemy = enemy
         self.author_id = author_id
         self.chosen: NpcWeapon | NpcSystem | None = None
 
@@ -355,8 +362,8 @@ class FeaturePickerView(discord.ui.View):
 
         for i, feat in enumerate(all_features[:20]):
             ftype = feat.weapon_type if isinstance(feat, NpcWeapon) else feat.system_type
-            icon  = self._TYPE_ICON.get(
-                "Weapon" if isinstance(feat, NpcWeapon) else feat.system_type, "▶️"
+            icon = self._TYPE_ICON.get(
+                "Weapon" if isinstance(feat, NpcWeapon) else feat.system_type, ""
             )
             style = self._TYPE_STYLE.get(
                 "Weapon" if isinstance(feat, NpcWeapon) else feat.system_type,
@@ -371,7 +378,7 @@ class FeaturePickerView(discord.ui.View):
             self.add_item(btn)
 
         cancel = discord.ui.Button(
-            label="✖ Cancel",
+            label="Cancel",
             style=discord.ButtonStyle.secondary,
             row=4,
         )
@@ -400,40 +407,40 @@ class NpcActionView(discord.ui.View):
     """
     Buttons shown after an NPC weapon/tech action.
 
-    Row 0  [Apply HP dmg → target]   (only when target is set)
-    Row 1  [🌡️ Apply self-heat to NPC]
+    Row 0 [Apply HP dmg → target] (only when target is set)
+    Row 1 [ Apply self-heat to NPC]
 
     When a player target is provided the HP button writes to that player's
-    mech HP in utils/storage.  When no target is provided the button falls
+    mech HP in utils/storage. When no target is provided the button falls
     back to a manual-tracking ephemeral.
     """
 
     def __init__(
         self,
-        guild_id:    int,
-        channel_id:  int,
-        enemy:       NpcEnemy,
-        self_heat:   int,
-        hp_damage:   int,
-        embed:       discord.Embed,
-        target:      "TargetResult | None" = None,
+        guild_id: int,
+        channel_id: int,
+        enemy: NpcEnemy,
+        self_heat: int,
+        hp_damage: int,
+        embed: discord.Embed,
+        target: "TargetResult | None" = None,
     ):
         super().__init__(timeout=120)
-        self.guild_id   = guild_id
+        self.guild_id = guild_id
         self.channel_id = channel_id
-        self.enemy      = enemy
-        self.self_heat  = self_heat
-        self.hp_damage  = hp_damage
-        self.embed      = embed
-        self.target     = target
+        self.enemy = enemy
+        self.self_heat = self_heat
+        self.hp_damage = hp_damage
+        self.embed = embed
+        self.target = target
 
         # ── Row 0: target HP button ───────────────────────────────────────────
         if hp_damage <= 0:
             self.apply_target_hp.disabled = True
-            self.apply_target_hp.label    = "No HP damage"
+            self.apply_target_hp.label = "No HP damage"
         else:
             tname = target.label if target else "target"
-            self.apply_target_hp.label = f"💢 Apply {hp_damage} dmg → {tname}"
+            self.apply_target_hp.label = f"Apply {hp_damage} dmg → {tname}"
 
         if not target:
             # No target set — button will send a manual-track ephemeral
@@ -442,9 +449,9 @@ class NpcActionView(discord.ui.View):
         # ── Row 1: self-heat button ───────────────────────────────────────────
         if self_heat <= 0:
             self.apply_self_heat.disabled = True
-            self.apply_self_heat.label    = "No self-heat"
+            self.apply_self_heat.label = "No self-heat"
         else:
-            self.apply_self_heat.label = f"🌡️ +{self_heat} Heat → {enemy.display_name}"
+            self.apply_self_heat.label = f"+{self_heat} Heat → {enemy.display_name}"
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
@@ -465,7 +472,7 @@ class NpcActionView(discord.ui.View):
     ):
         if self.target is None:
             await interaction.response.send_message(
-                f"📊 Deal **{self.hp_damage} HP damage** to your target manually.",
+                f"Deal **{self.hp_damage} HP damage** to your target manually.",
                 ephemeral=True,
             )
             return
@@ -478,22 +485,22 @@ class NpcActionView(discord.ui.View):
             import json as _json
             from utils.lancer_checks import roll_structure_check, attach_cascade
 
-            uid  = self.target.player_user_id
-            raw  = _storage.load_raw(self.guild_id, uid)
+            uid = self.target.player_user_id
+            raw = _storage.load_raw(self.guild_id, uid)
             char = _storage.load(self.guild_id, uid)
 
             if raw is None or char is None or char.active_mech is None:
                 await interaction.followup.send(
-                    f"⚠️ Could not find a character for <@{uid}>.",
+                    f"Could not find a character for <@{uid}>.",
                     ephemeral=True,
                 )
                 return
 
-            data     = _json.loads(raw)
-            ms       = char.active_mech.stats
-            cur      = data["data"]["mechs"][0]["stats"]["current"]
-            old_hp   = cur.get("hp", ms.hp)
-            new_hp   = max(0, old_hp - self.hp_damage)
+            data = _json.loads(raw)
+            ms = char.active_mech.stats
+            cur = data["data"]["mechs"][0]["stats"]["current"]
+            old_hp = cur.get("hp", ms.hp)
+            new_hp = max(0, old_hp - self.hp_damage)
             overflow = max(0, -new_hp)
 
             structure_result = None
@@ -504,45 +511,60 @@ class NpcActionView(discord.ui.View):
                     hp_overflow=overflow,
                 )
                 attach_cascade(structure_result, char.active_mech)
-                new_structure    = max(0, structure_result.structure_after)
+                new_structure = max(0, structure_result.structure_after)
                 cur["structure"] = new_structure
-                cur["hp"]        = max(0, ms.hp - overflow) if new_structure > 0 else 0
+                cur["hp"] = max(0, ms.hp - overflow) if new_structure > 0 else 0
             else:
                 cur["hp"] = new_hp
 
             _storage.save_raw(self.guild_id, uid, char.pilot.callsign, _json.dumps(data))
 
             final_hp = cur["hp"]
-            bar      = _progress_bar(final_hp, ms.hp)
-            field_val = f"❤️ `{bar}` **{old_hp} → {final_hp}/{ms.hp}**"
+            bar = _progress_bar(final_hp, ms.hp)
+            field_val = f" `{bar}` **{old_hp} → {final_hp}/{ms.hp}**"
             if structure_result:
                 field_val += (
-                    f"\n⚠️ **Structure Check triggered!** "
+                    f"\n **Structure Check triggered!** "
                     f"({structure_result.result_name})"
                 )
 
             # Post structure embed if needed
             if structure_result:
-                from cogs.encounter import _build_structure_embed  # same module
+                from cogs.encounter import _build_structure_embed # same module
                 await interaction.followup.send(
                     embed=_build_structure_embed(structure_result, char.active_mech)
                 )
 
         else:
             # NPC-on-NPC damage (rare but possible)
-            old, new, maxhp, killed = _npc_apply_hp(
+            old, new, maxhp, killed, struct_res = _npc_apply_hp(
                 self.guild_id, self.channel_id,
                 self.target.npc_slug, self.hp_damage,
             )
             bar       = _progress_bar(new, maxhp)
-            status    = "💀 **DESTROYED**" if killed else f"**{old} → {new}/{maxhp}**"
-            field_val = f"❤️ `{bar}` {status}"
+            status    = "**DESTROYED**" if killed else f"**{old} → {new}/{maxhp}**"
+            field_val = f"`{bar}` {status}"
+            if struct_res and not killed:
+                field_val += f"\nStructure Check: {struct_res.result_name}"
 
         button.disabled = True
-        button.label    = f"✅ {self.hp_damage} dmg applied"
+        button.label    = f"{self.hp_damage} dmg applied"
         button.style    = discord.ButtonStyle.success
-        self._patch_field(f"💢 {self.target.label} HP", field_val)
+        self._patch_field(f"{self.target.label} HP", field_val)
         await interaction.edit_original_response(embed=self.embed, view=self)
+
+        # Post structure-check embed for NPC targets
+        if self.target.kind == "npc":
+            local = locals()
+            sr = local.get('struct_res')
+            if sr and not local.get('killed', True):
+                tgt_enemy = npc_storage.get_enemy(
+                    self.guild_id, self.channel_id, self.target.npc_slug
+                )
+                if tgt_enemy:
+                    await interaction.followup.send(
+                        embed=_build_structure_embed(sr, tgt_enemy)
+                    )
 
     # ── Row 1 — self-heat on NPC ─────────────────────────────────────────────
 
@@ -552,32 +574,32 @@ class NpcActionView(discord.ui.View):
     ):
         enemy = npc_storage.get_enemy(self.guild_id, self.channel_id, self.enemy.slug)
         if enemy is None:
-            await interaction.response.send_message("❌ Enemy not found.", ephemeral=True)
+            await interaction.response.send_message("Enemy not found.", ephemeral=True)
             return
 
-        s            = enemy.stats
-        old_heat     = s.current_heat
+        s = enemy.stats
+        old_heat = s.current_heat
         new_heat_raw = old_heat + self.self_heat
-        overloaded   = new_heat_raw > s.heatcap and s.heatcap > 0
-        new_heat     = max(0, min(s.heatcap, new_heat_raw))
+        overloaded = new_heat_raw > s.heatcap and s.heatcap > 0
+        new_heat = max(0, min(s.heatcap, new_heat_raw))
 
         npc_storage.update_enemy_vitals(
             self.guild_id, self.channel_id, enemy.slug, heat=new_heat
         )
 
         button.disabled = True
-        button.label    = f"✅ +{self.self_heat} Heat Applied"
-        button.style    = discord.ButtonStyle.success
+        button.label = f"+{self.self_heat} Heat Applied"
+        button.style = discord.ButtonStyle.success
 
-        bar          = _progress_bar(new_heat, s.heatcap)
-        dz           = "  🌡️ **DANGER ZONE!**" if new_heat >= s.heatcap // 2 else ""
+        bar = _progress_bar(new_heat, s.heatcap)
+        dz = "**DANGER ZONE!**" if new_heat >= s.heatcap // 2 else ""
         overheat_str = (
-            "\n☢️ **OVERHEATED** — NPC takes 2 AP Energy, Impaired/Slowed."
+            "\n **OVERHEATED** — NPC takes 2 AP Energy, Impaired/Slowed."
             if overloaded else ""
         )
         self._patch_field(
-            "🌡️ Self Heat",
-            f"**+{self.self_heat}** applied  ·  `{bar}` **{new_heat}/{s.heatcap}**{dz}{overheat_str}",
+            "Self Heat",
+            f"**+{self.self_heat}** applied · `{bar}` **{new_heat}/{s.heatcap}**{dz}{overheat_str}",
         )
         await interaction.response.edit_message(embed=self.embed, view=self)
 
@@ -587,20 +609,53 @@ class NpcActionView(discord.ui.View):
 def _npc_apply_hp(
     guild_id: int, channel_id: int,
     slug: str, damage: int,
-) -> tuple[int, int, int, bool]:
-    """Subtract damage from an NPC. Returns (old_hp, new_hp, max_hp, killed)."""
+) -> tuple[int, int, int, bool, object]:
+    """
+    Subtract damage from an NPC.
+    Returns (old_hp, new_hp, max_hp, killed, structure_result_or_None).
+
+    When HP reaches 0 and the NPC has more than 1 structure remaining, a
+    structure check is rolled automatically and persisted.  The caller is
+    responsible for posting the structure-check embed.
+    """
+    from utils.lancer_checks import roll_structure_check, attach_cascade
+
     enemy = npc_storage.get_enemy(guild_id, channel_id, slug)
     if enemy is None:
-        return 0, 0, 0, False
-    s      = enemy.stats
-    old_hp = s.current_hp
-    new_hp = max(0, old_hp - damage)
-    killed = new_hp == 0 and s.current_structure <= 1
-    npc_storage.update_enemy_vitals(
-        guild_id, channel_id, slug,
-        hp=new_hp, is_dead=killed if killed else None,
-    )
-    return old_hp, new_hp, s.hp, killed
+        return 0, 0, 0, False, None
+
+    s        = enemy.stats
+    old_hp   = s.current_hp
+    new_hp   = max(0, old_hp - damage)
+    overflow = max(0, -new_hp)   # damage past 0 HP
+
+    if new_hp <= 0 and s.current_structure > 0:
+        if s.current_structure <= 1:
+            # Last structure point — NPC is destroyed
+            npc_storage.update_enemy_vitals(
+                guild_id, channel_id, slug, hp=0, is_dead=True,
+            )
+            return old_hp, 0, s.hp, True, None
+        else:
+            # Structure check triggered — spend 1 structure, reset HP
+            structure_result = roll_structure_check(
+                structure_before=s.current_structure,
+                max_structure=s.structure,
+                hp_overflow=overflow,
+            )
+            attach_cascade(structure_result, enemy)
+            new_structure = max(0, structure_result.structure_after)
+            reset_hp      = max(0, s.hp - overflow) if new_structure > 0 else 0
+            npc_storage.update_enemy_vitals(
+                guild_id, channel_id, slug,
+                hp=reset_hp,
+                structure=new_structure,
+                is_dead=(new_structure == 0) or None,
+            )
+            return old_hp, reset_hp, s.hp, (new_structure == 0), structure_result
+    else:
+        npc_storage.update_enemy_vitals(guild_id, channel_id, slug, hp=new_hp)
+        return old_hp, new_hp, s.hp, False, None
 
 
 # ── _build_structure_embed (re-exported for use by NpcActionView) ─────────────
@@ -609,47 +664,47 @@ def _build_structure_embed(result, mech) -> discord.Embed:
     """Thin wrapper — the real impl lives in use.py but we need it here too."""
     color = 0x1A1A1A if result.destroyed else (0xFF5252 if result.lowest == 1 else 0xFF9800)
     embed = discord.Embed(
-        title=f"🦾 Structure Check — {result.result_name}",
+        title=f"Structure Check — {result.result_name}",
         color=color,
     )
     if result.dice_rolled:
-        dice_str = "  ".join(
+        dice_str = " ".join(
             f"**{d}**" if d == result.lowest else str(d)
             for d in result.dice_rolled
         )
         embed.add_field(
-            name=f"🎲 Rolled {len(result.dice_rolled)}d6 (lowest is worst)",
+            name=f"Rolled {len(result.dice_rolled)}d6 (lowest is worst)",
             value=dice_str + f"\n→ Kept: **{result.lowest}**",
             inline=False,
         )
     struct_pips = (
-        "█" * result.structure_after
-        + "░" * (result.structure_before - result.structure_after)
+        "█"* result.structure_after
+        + "░"* (result.structure_before - result.structure_after)
     )
     if result.structure_before > 0:
         embed.add_field(
-            name="🛡️ Structure",
+            name="Structure",
             value=f"`{struct_pips}` {result.structure_after}/{result.structure_before}",
             inline=True,
         )
     if result.hp_overflow:
         embed.add_field(
-            name="💢 HP Overflow",
+            name="HP Overflow",
             value=f"**{result.hp_overflow}** damage carries to next structure",
             inline=True,
         )
-    embed.add_field(name="📋 Result", value=result.result_detail, inline=False)
+    embed.add_field(name="Result", value=result.result_detail, inline=False)
     if getattr(result, "nhp_present", False):
         if result.cascade_triggered:
             embed.add_field(
                 name="NHP Cascade",
-                value=f"d20: **{result.cascade_roll}** = 1  →  ⚠️ **CASCADE!**",
+                value=f"d20: **{result.cascade_roll}** = 1 → **CASCADE!**",
                 inline=False,
             )
         else:
             embed.add_field(
                 name="NHP Cascade",
-                value=f"d20: **{result.cascade_roll}**  →  ✅ No cascade.",
+                value=f"d20: **{result.cascade_roll}** → No cascade.",
                 inline=False,
             )
     return embed
@@ -662,7 +717,7 @@ def _fuzzy_feature(
     enemy: NpcEnemy,
 ) -> list[NpcWeapon | NpcSystem]:
     """Case-insensitive word-by-word match across weapons + systems."""
-    q     = query.strip().lower()
+    q = query.strip().lower()
     words = q.split()
     all_f: list[NpcWeapon | NpcSystem] = list(enemy.weapons) + list(enemy.systems)
 
@@ -687,9 +742,9 @@ def _require_enemy(
     if enemy is None:
         enemies = npc_storage.list_enemies(guild_id, channel_id)
         if not enemies:
-            return None, "❌ No enemies in this encounter. Use `!npc add` to add some."
+            return None, "No enemies in this encounter. Use `!npc add` to add some."
         names = ", ".join(f"**{e.display_name}**" for e in enemies)
-        return None, f"❌ No enemy matching **\"{query}\"**. Available: {names}"
+        return None, f"No enemy matching **\"{query}\"**. Available: {names}"
     return enemy, None
 
 
@@ -698,10 +753,10 @@ def _require_enemy(
 class ConfirmView(discord.ui.View):
     def __init__(self, author_id: int):
         super().__init__(timeout=30)
-        self.confirmed  = False
-        self.author_id  = author_id
+        self.confirmed = False
+        self.author_id = author_id
 
-    @discord.ui.button(label="✅ Yes, clear everything", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Yes, clear everything", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.author_id:
             await interaction.response.send_message("Not your call.", ephemeral=True)
@@ -726,29 +781,29 @@ class ActivateView(discord.ui.View):
         super().__init__(timeout=60)
         self.author_id = author_id
         self.selected: set[str] = {e.slug for e in enemies if e.is_active}
-        self.enemies   = enemies
+        self.enemies = enemies
         self.confirmed = False
         self._build_buttons()
 
     def _build_buttons(self):
         self.clear_items()
         for i, e in enumerate(self.enemies[:20]):
-            row    = i // 5
+            row = i // 5
             active = e.slug in self.selected
-            style  = discord.ButtonStyle.success if active else discord.ButtonStyle.secondary
-            label  = f"{'⚡ ' if active else ''}{e.display_name}"
-            btn    = discord.ui.Button(label=label[:80], style=style, row=row)
+            style = discord.ButtonStyle.success if active else discord.ButtonStyle.secondary
+            label = f"{'[*] ' if active else ''}{e.display_name}"
+            btn = discord.ui.Button(label=label[:80], style=style, row=row)
             btn.callback = self._make_toggle(e.slug)
             self.add_item(btn)
 
         confirm_btn = discord.ui.Button(
-            label="✅ Confirm", style=discord.ButtonStyle.primary, row=4
+            label="Confirm", style=discord.ButtonStyle.primary, row=4
         )
         confirm_btn.callback = self._confirm_callback
         self.add_item(confirm_btn)
 
         clear_btn = discord.ui.Button(
-            label="✖ Clear All", style=discord.ButtonStyle.danger, row=4
+            label="Clear All", style=discord.ButtonStyle.danger, row=4
         )
         clear_btn.callback = self._clear_callback
         self.add_item(clear_btn)
@@ -785,17 +840,17 @@ class ActivateView(discord.ui.View):
 class FeatureDisambiguateView(discord.ui.View):
     """Shown when a query matches more than one feature."""
     _TYPE_STYLE = {
-        "Weapon":   discord.ButtonStyle.danger,
-        "Tech":     discord.ButtonStyle.primary,
-        "System":   discord.ButtonStyle.secondary,
-        "Trait":    discord.ButtonStyle.secondary,
+        "Weapon": discord.ButtonStyle.danger,
+        "Tech": discord.ButtonStyle.primary,
+        "System": discord.ButtonStyle.secondary,
+        "Trait": discord.ButtonStyle.secondary,
         "Reaction": discord.ButtonStyle.secondary,
     }
     _TYPE_ICON = {
-        "Weapon":   "⚔️",
-        "Tech":     "💻",
-        "System":   "🔧",
-        "Trait":    "🧬",
+        "Weapon": "",
+        "Tech": "",
+        "System": "",
+        "Trait": "",
         "Reaction": "↩️",
     }
 
@@ -807,9 +862,9 @@ class FeatureDisambiguateView(discord.ui.View):
         for i, feat in enumerate(matches[:5]):
             is_weapon = isinstance(feat, NpcWeapon)
             ftype_key = "Weapon" if is_weapon else feat.system_type
-            icon  = self._TYPE_ICON.get(ftype_key, "▶️")
+            icon = self._TYPE_ICON.get(ftype_key, "")
             style = self._TYPE_STYLE.get(ftype_key, discord.ButtonStyle.secondary)
-            btn   = discord.ui.Button(label=f"{icon} {feat.name}"[:80], style=style, row=i)
+            btn = discord.ui.Button(label=f"{icon} {feat.name}"[:80], style=style, row=i)
             btn.callback = self._make_cb(feat)
             self.add_item(btn)
 
@@ -842,68 +897,68 @@ class EncounterCog(commands.Cog, name="Encounter"):
         invoke_without_command=True,
     )
     async def npc(self, ctx: commands.Context):
-        """Encounter management.  Run `!npc` for a quick guide."""
+        """Encounter management. Run `!npc` for a quick guide."""
         embed = discord.Embed(
-            title="⚔️ Encounter Commands",
+            title="Encounter Commands",
             description="Manage NPC enemies for your Lancer session.",
             color=0xCF2020,
         )
         embed.add_field(
-            name="📥 Adding enemies",
+            name="Adding enemies",
             value=(
-                "`!npc add`              — attach 1+ NPC JSON files\n"
-                "`!npc add -qty 3`       — 3 copies of attached NPC (→ A, B, C)\n"
+                "`!npc add` — attach 1+ NPC JSON files\n"
+                "`!npc add -qty 3` — 3 copies of attached NPC (→ A, B, C)\n"
                 "Multiple files can be attached at once."
             ),
             inline=False,
         )
         embed.add_field(
-            name="📋 Viewing",
+            name="Viewing",
             value=(
-                "`!npc list`             — encounter roster overview\n"
-                "`!npc show <name>`      — full statblock"
+                "`!npc list` — encounter roster overview\n"
+                "`!npc show <name>` — full statblock"
             ),
             inline=False,
         )
         embed.add_field(
-            name="⚡ Activating enemies",
+            name="[*] Activating enemies",
             value=(
-                "`!npc activate`         — interactive selector\n"
+                "`!npc activate` — interactive selector\n"
                 "`!npc activate <name…>` — activate by name directly\n"
-                "`!npc deactivate`       — clear active markers"
+                "`!npc deactivate` — clear active markers"
             ),
             inline=False,
         )
         embed.add_field(
-            name="🎲 NPC Actions  (!npca)",
+            name="NPC Actions (!npca)",
             value=(
                 "Uses the **active** enemy automatically — activate first with `!npc activate`.\n"
-                "`!npca`                              — pick from active enemy's actions\n"
-                "`!npca graviton lance`               — fire that weapon (active enemy)\n"
-                "`!npca drag down`                    — use that tech (active enemy)\n"
-                "`!npca mobile printer`               — show system effect (active enemy)\n"
-                "`!npca <enemy> <feature>`            — explicit target (reactions / 2+ active)\n"
-                "`!npca graviton lance -t @Player`    — target player; button applies HP dmg\n"
-                "`!npca drag down -t @Player`         — tech attack on player\n"
+                "`!npca` — pick from active enemy's actions\n"
+                "`!npca graviton lance` — fire that weapon (active enemy)\n"
+                "`!npca drag down` — use that tech (active enemy)\n"
+                "`!npca mobile printer` — show system effect (active enemy)\n"
+                "`!npca <enemy> <feature>` — explicit target (reactions / 2+ active)\n"
+                "`!npca graviton lance -t @Player` — target player; button applies HP dmg\n"
+                "`!npca drag down -t @Player` — tech attack on player\n"
                 "Accuracy: add `acc 2` or `a2` at the end"
             ),
             inline=False,
         )
         embed.add_field(
-            name="🩸 Tracking vitals",
+            name="Tracking vitals",
             value=(
-                "`!npc hp <name> +5`     — add HP\n"
-                "`!npc hp <name> -3`     — remove HP\n"
-                "`!npc heat <name> +4`   — add heat\n"
-                "`!npc fr <name>`        — full repair"
+                "`!npc hp <name> +5` — add HP\n"
+                "`!npc hp <name> -3` — remove HP\n"
+                "`!npc heat <name> +4` — add heat\n"
+                "`!npc fr <name>` — full repair"
             ),
             inline=False,
         )
         embed.add_field(
-            name="🗑️ Removing",
+            name="Removing",
             value=(
-                "`!npc kill <name>`      — mark destroyed\n"
-                "`!npc clear`            — wipe the whole encounter"
+                "`!npc kill <name>` — mark destroyed\n"
+                "`!npc clear` — wipe the whole encounter"
             ),
             inline=False,
         )
@@ -920,14 +975,14 @@ class EncounterCog(commands.Cog, name="Encounter"):
         """
         if not ctx.message.attachments:
             await ctx.reply(
-                "❌ No file attached.\n"
+                "No file attached.\n"
                 "Attach NPC JSON file(s) from comp/con, then run `!npc add`.\n"
                 "Use `-qty N` for multiple copies: `!npc add -qty 2`",
                 mention_author=False,
             )
             return
 
-        qty  = 1
+        qty = 1
         text = " ".join(args).lower()
         qty_m = re.search(r"-qty\s+(\d+)", text)
         if qty_m:
@@ -940,23 +995,23 @@ class EncounterCog(commands.Cog, name="Encounter"):
         async with ctx.typing():
             for att in attachments:
                 if not att.filename.endswith(".json"):
-                    errors.append(f"⚠️ `{att.filename}` — not a .json file, skipped.")
+                    errors.append(f" `{att.filename}` — not a .json file, skipped.")
                     continue
                 if att.size > MAX_ATTACHMENT_SIZE:
-                    errors.append(f"⚠️ `{att.filename}` — too large, skipped.")
+                    errors.append(f" `{att.filename}` — too large, skipped.")
                     continue
                 raw = await att.read()
                 try:
                     from utils.npc_parser import parse_npc_json
-                    parse_npc_json(raw)   # validate
+                    parse_npc_json(raw) # validate
                     raw_jsons.append(raw.decode("utf-8"))
                 except ValueError as e:
-                    errors.append(f"⚠️ `{att.filename}` — {e}")
+                    errors.append(f" `{att.filename}` — {e}")
 
         if not raw_jsons:
-            msg = "❌ No valid NPC files could be imported."
+            msg = "No valid NPC files could be imported."
             if errors:
-                msg += "\n" + "\n".join(errors)
+                msg += "\n"+ "\n".join(errors)
             await ctx.reply(msg, mention_author=False)
             return
 
@@ -968,7 +1023,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
 
         embed = build_add_result_embed(added)
         if errors:
-            embed.add_field(name="⚠️ Warnings", value="\n".join(errors), inline=False)
+            embed.add_field(name="Warnings", value="\n".join(errors), inline=False)
         embed.set_author(
             name=f"Added by {ctx.author.display_name}",
             icon_url=ctx.author.display_avatar.url,
@@ -992,7 +1047,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
 
     @npc.command(name="show", aliases=["s", "stat", "statblock", "info"])
     async def npc_show(self, ctx: commands.Context, *, name: str = ""):
-        """Show the full statblock for one enemy.  Usage: !npc show barricade"""
+        """Show the full statblock for one enemy. Usage: !npc show barricade"""
         if not name:
             await ctx.reply("Usage: `!npc show <name>`", mention_author=False)
             return
@@ -1034,36 +1089,36 @@ class EncounterCog(commands.Cog, name="Encounter"):
 
             if not resolved:
                 all_names = ", ".join(f"**{e.display_name}**" for e in enemies)
-                await ctx.reply(f"❌ None matched. Available: {all_names}", mention_author=False)
+                await ctx.reply(f"None matched. Available: {all_names}", mention_author=False)
                 return
 
             npc_storage.set_active_enemies(ctx.guild.id, ctx.channel.id, resolved)
             updated = npc_storage.list_enemies(ctx.guild.id, ctx.channel.id)
             active_names = ", ".join(f"**{e.display_name}**" for e in updated if e.is_active)
-            msg = f"⚡ Activated: {active_names}"
+            msg = f"[*] Activated: {active_names}"
             if not_found:
-                msg += f"\n⚠️ Not found: {', '.join(not_found)}"
-            embed = build_encounter_embed(updated, title="⚡ Activation Updated")
+                msg += f"\n Not found: {', '.join(not_found)}"
+            embed = build_encounter_embed(updated, title="[*] Activation Updated")
             await ctx.reply(msg, embed=embed, mention_author=False)
             return
 
         # Interactive selector
         view = ActivateView(enemies, ctx.author.id)
-        embed = build_encounter_embed(enemies, title="⚡ Select Active Enemies")
-        embed.set_footer(text="Toggle enemies below, then click ✅ Confirm")
+        embed = build_encounter_embed(enemies, title="[*] Select Active Enemies")
+        embed.set_footer(text="Toggle enemies below, then click Confirm")
         msg = await ctx.reply(embed=embed, view=view, mention_author=False)
         await view.wait()
 
         if not view.confirmed:
-            await msg.edit(content="⏱️ Timed out.", embed=None, view=None)
+            await msg.edit(content="Timed out.", embed=None, view=None)
             return
 
         npc_storage.set_active_enemies(ctx.guild.id, ctx.channel.id, list(view.selected))
-        updated     = npc_storage.list_enemies(ctx.guild.id, ctx.channel.id)
+        updated = npc_storage.list_enemies(ctx.guild.id, ctx.channel.id)
         active_names = ", ".join(f"**{e.display_name}**" for e in updated if e.is_active) or "*(none)*"
         await msg.edit(
-            content=f"⚡ Active: {active_names}",
-            embed=build_encounter_embed(updated, title="⚡ Activation Updated"),
+            content=f"[*] Active: {active_names}",
+            embed=build_encounter_embed(updated, title="[*] Activation Updated"),
             view=None,
         )
 
@@ -1074,7 +1129,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
         """Clear all active markers (end of NPC turn)."""
         npc_storage.set_active_enemies(ctx.guild.id, ctx.channel.id, [])
         enemies = npc_storage.list_enemies(ctx.guild.id, ctx.channel.id)
-        embed   = build_encounter_embed(enemies, title="✅ All enemies deactivated")
+        embed = build_encounter_embed(enemies, title="All enemies deactivated")
         await ctx.reply(embed=embed, mention_author=False)
 
     # ── !npc hp ───────────────────────────────────────────────────────────────
@@ -1105,28 +1160,53 @@ class EncounterCog(commands.Cog, name="Encounter"):
         if amount_str is None:
             bar = _progress_bar(s.current_hp, s.hp)
             await ctx.reply(
-                f"❤️ **{enemy.display_name}** HP: `{bar}` **{s.current_hp}/{s.hp}**",
+                f"**{enemy.display_name}** HP: `{bar}` **{s.current_hp}/{s.hp}**",
                 mention_author=False,
             )
             return
 
         is_relative = amount_str.startswith(("+", "-"))
-        delta   = int(amount_str)
-        old_hp  = s.current_hp
-        new_hp  = max(0, min(s.hp, (old_hp + delta) if is_relative else delta))
-        killed  = new_hp == 0 and s.current_structure <= 1
+        # Bare positive integer → treat as relative add (+N), not set
+        if not is_relative and int(amount_str) > 0:
+            is_relative = True
+        delta  = int(amount_str)
+        old_hp = s.current_hp
 
-        npc_storage.update_enemy_vitals(
-            ctx.guild.id, ctx.channel.id, enemy.slug,
-            hp=new_hp, is_dead=killed if killed else None,
-        )
+        # Compute effective damage to pass to _npc_apply_hp
+        if is_relative:
+            # Negative delta = HP gain (heal); positive = reduce HP
+            effective_dmg = delta if delta > 0 else 0
+            heal_amount   = abs(delta) if delta < 0 else 0
+        else:
+            # Absolute set: compute damage from current
+            target_hp     = max(0, min(s.hp, delta))
+            effective_dmg = old_hp - target_hp if old_hp > target_hp else 0
+            heal_amount   = target_hp - old_hp if target_hp > old_hp else 0
 
-        bar    = _progress_bar(new_hp, s.hp)
+        if effective_dmg > 0:
+            old, new, maxhp, killed, struct_res = _npc_apply_hp(
+                ctx.guild.id, ctx.channel.id, enemy.slug, effective_dmg
+            )
+        else:
+            # Healing or no change — just write directly
+            new_hp = min(s.hp, old_hp + heal_amount)
+            npc_storage.update_enemy_vitals(ctx.guild.id, ctx.channel.id, enemy.slug, hp=new_hp)
+            old, new, maxhp, killed, struct_res = old_hp, new_hp, s.hp, False, None
+
+        # Re-fetch for accurate bar after DB write
+        updated = npc_storage.get_enemy(ctx.guild.id, ctx.channel.id, enemy.slug)
+        display_hp = updated.stats.current_hp if updated else new
+
+        bar    = _progress_bar(display_hp, s.hp)
         change = f"({delta:+})" if is_relative else "(set)"
-        msg    = f"❤️ **{enemy.display_name}** HP: `{bar}` **{old_hp}** → **{new_hp}/{s.hp}** {change}"
+        msg    = f"**{enemy.display_name}** HP: `{bar}` **{old_hp}** → **{display_hp}/{s.hp}** {change}"
         if killed:
-            msg += "\n💀 **DESTROYED** — HP and Structure both at 0."
+            msg += "\n**DESTROYED** — no structure remaining."
+        elif struct_res:
+            msg += f"\nStructure Check triggered! ({struct_res.result_name})"
         await ctx.reply(msg, mention_author=False)
+        if struct_res:
+            await ctx.send(embed=_build_structure_embed(struct_res, enemy))
 
     # ── !npc heat ─────────────────────────────────────────────────────────────
 
@@ -1154,28 +1234,31 @@ class EncounterCog(commands.Cog, name="Encounter"):
         s = enemy.stats
         if amount_str is None:
             bar = _progress_bar(s.current_heat, s.heatcap)
-            dz  = "  🌡️ DANGER ZONE" if s.current_heat >= s.heatcap // 2 else ""
+            dz = "DANGER ZONE" if s.current_heat >= s.heatcap // 2 else ""
             await ctx.reply(
-                f"🌡️ **{enemy.display_name}** Heat: `{bar}` **{s.current_heat}/{s.heatcap}**{dz}",
+                f"**{enemy.display_name}** Heat: `{bar}` **{s.current_heat}/{s.heatcap}**{dz}",
                 mention_author=False,
             )
             return
 
-        is_relative  = amount_str.startswith(("+", "-"))
+        is_relative = amount_str.startswith(("+", "-"))
+        # Bare positive integer → treat as relative add (+N), not set
+        if not is_relative and int(amount_str) > 0:
+            is_relative = True
         delta        = int(amount_str)
         old_heat     = s.current_heat
         new_heat_raw = (old_heat + delta) if is_relative else delta
-        overloaded   = new_heat_raw > s.heatcap and s.heatcap > 0
-        new_heat     = max(0, min(s.heatcap, new_heat_raw))
+        overloaded = new_heat_raw > s.heatcap and s.heatcap > 0
+        new_heat = max(0, min(s.heatcap, new_heat_raw))
 
         npc_storage.update_enemy_vitals(ctx.guild.id, ctx.channel.id, enemy.slug, heat=new_heat)
 
-        bar    = _progress_bar(new_heat, s.heatcap)
+        bar = _progress_bar(new_heat, s.heatcap)
         change = f"({delta:+})" if is_relative else "(set)"
-        dz     = "  🌡️ **DANGER ZONE!**" if new_heat >= s.heatcap // 2 else ""
-        msg    = f"🌡️ **{enemy.display_name}** Heat: `{bar}` **{old_heat}** → **{new_heat}/{s.heatcap}** {change}{dz}"
+        dz = "**DANGER ZONE!**" if new_heat >= s.heatcap // 2 else ""
+        msg = f"**{enemy.display_name}** Heat: `{bar}` **{old_heat}** → **{new_heat}/{s.heatcap}** {change}{dz}"
         if overloaded:
-            msg += "\n☢️ **OVERHEATED** — NPC takes 2 AP Energy, Impaired/Slowed."
+            msg += "\n **OVERHEATED** — NPC takes 2 AP Energy, Impaired/Slowed."
         await ctx.reply(msg, mention_author=False)
 
     # ── !npc kill ─────────────────────────────────────────────────────────────
@@ -1192,7 +1275,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
             return
         npc_storage.update_enemy_vitals(ctx.guild.id, ctx.channel.id, enemy.slug, is_dead=True)
         enemies = npc_storage.list_enemies(ctx.guild.id, ctx.channel.id, include_dead=True)
-        embed   = build_encounter_embed(enemies, title=f"💀 {enemy.display_name} Destroyed")
+        embed = build_encounter_embed(enemies, title=f"{enemy.display_name} Destroyed")
         await ctx.reply(embed=embed, mention_author=False)
 
     # ── !npc fr ───────────────────────────────────────────────────────────────
@@ -1214,7 +1297,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
             burn=0, overshield=0, is_dead=False,
         )
         await ctx.reply(
-            f"🔧 **{enemy.display_name}** fully repaired — "
+            f"**{enemy.display_name}** fully repaired — "
             f"HP **{s.hp}/{s.hp}**, Heat **0/{s.heatcap}**, Struct **{s.structure}/{s.structure}**.",
             mention_author=False,
         )
@@ -1230,18 +1313,18 @@ class EncounterCog(commands.Cog, name="Encounter"):
             return
         view = ConfirmView(ctx.author.id)
         await ctx.reply(
-            f"⚠️ This will remove all **{len(enemies)}** enemies. Are you sure?",
+            f"This will remove all **{len(enemies)}** enemies. Are you sure?",
             view=view, mention_author=False,
         )
         await view.wait()
         if view.confirmed:
             removed = npc_storage.clear_encounter(ctx.guild.id, ctx.channel.id)
-            await ctx.send(f"🗑️ Encounter cleared — {removed} enemies removed.")
+            await ctx.send(f"Encounter cleared — {removed} enemies removed.")
         else:
             await ctx.send("Cancelled.")
 
     # ══════════════════════════════════════════════════════════════════════════
-    # !npca  —  NPC action command
+    # !npca — NPC action command
     # ══════════════════════════════════════════════════════════════════════════
 
     @commands.command(name="npca", aliases=["npcaction", "na"])
@@ -1251,11 +1334,11 @@ class EncounterCog(commands.Cog, name="Encounter"):
 
         Normal usage (active enemy is set via !npc activate):
         ───────────────────────────────────────────────────────
-            !npca                        — interactive picker for the active enemy
-            !npca graviton lance         — fire that weapon  (active enemy)
-            !npca drag down              — tech attack       (active enemy)
-            !npca mobile printer         — show system       (active enemy)
-            !npca graviton lance acc 2   — +2 accuracy dice
+            !npca — interactive picker for the active enemy
+            !npca graviton lance — fire that weapon (active enemy)
+            !npca drag down — tech attack (active enemy)
+            !npca mobile printer — show system (active enemy)
+            !npca graviton lance acc 2 — +2 accuracy dice
 
         Explicit targeting (reactions, or when 2+ enemies are active):
         ───────────────────────────────────────────────────────────────
@@ -1275,15 +1358,22 @@ class EncounterCog(commands.Cog, name="Encounter"):
         enemies_alive = npc_storage.list_enemies(ctx.guild.id, ctx.channel.id)
         if not enemies_alive:
             await ctx.reply(
-                "❌ No enemies in this encounter. Use `!npc add` to add some.",
+                "No enemies in this encounter. Use `!npc add` to add some.",
                 mention_author=False,
             )
             return
 
         active_enemies = [e for e in enemies_alive if e.is_active]
 
+        # ── Strip -d / --damage flag (manual bonus damage) ───────────────────
+        text      = " ".join(args)
+        dmg_bonus = 0
+        dmg_m = re.search(r"(?:--|-)d(?:amage)?\s+(\d+)", text, re.IGNORECASE)
+        if dmg_m:
+            dmg_bonus = int(dmg_m.group(1))
+            text = (text[:dmg_m.start()] + text[dmg_m.end():]).strip()
+
         # ── Strip -t / --target flag ──────────────────────────────────────────
-        text        = " ".join(args)
         text, raw_target = parse_target_flag(text)
 
         # Resolve target now (needs guild members for display-name lookup)
@@ -1298,7 +1388,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
             )
             if target is None:
                 await ctx.reply(
-                    f"⚠️ Could not resolve target **\"{raw_target}\"**. "
+                    f"Could not resolve target **\"{raw_target}\"**. "
                     "Continuing without a target.",
                     mention_author=False,
                 )
@@ -1320,7 +1410,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
         if not text:
             if not active_enemies:
                 await ctx.reply(
-                    "❌ No active enemies. Use `!npc activate <name>` first, "
+                    "No active enemies. Use `!npc activate <name>` first, "
                     "or run `!npca <enemy> <feature>` to target explicitly.",
                     mention_author=False,
                 )
@@ -1329,13 +1419,13 @@ class EncounterCog(commands.Cog, name="Encounter"):
             if len(active_enemies) == 1:
                 # Single active enemy → show its picker
                 enemy = active_enemies[0]
-                await self._show_feature_picker(ctx, enemy, acc_bonus, target)
+                await self._show_feature_picker(ctx, enemy, acc_bonus, target, dmg_bonus)
             else:
                 # Multiple active enemies → ask which one to act
                 enemy = await self._pick_active_enemy(ctx, active_enemies)
                 if enemy is None:
                     return
-                await self._show_feature_picker(ctx, enemy, acc_bonus, target)
+                await self._show_feature_picker(ctx, enemy, acc_bonus, target, dmg_bonus)
             return
 
         # ══════════════════════════════════════════════════════════════════════
@@ -1354,7 +1444,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
                 if len(hits) == 1:
                     enemy, feature = hits[0]
                     async with ctx.typing():
-                        await self._execute_feature(ctx, enemy, feature, acc_bonus, target)
+                        await self._execute_feature(ctx, enemy, feature, acc_bonus, target, dmg_bonus)
                     return
 
                 # ── Multiple hits: deduplicate by (enemy.slug, feature.name) ─
@@ -1371,7 +1461,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
                 if len(unique_hits) == 1:
                     enemy, feature = unique_hits[0]
                     async with ctx.typing():
-                        await self._execute_feature(ctx, enemy, feature, acc_bonus, target)
+                        await self._execute_feature(ctx, enemy, feature, acc_bonus, target, dmg_bonus)
                     return
 
                 # Still multiple → disambiguation picker
@@ -1380,7 +1470,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
                     return
                 enemy, feature = chosen
                 async with ctx.typing():
-                    await self._execute_feature(ctx, enemy, feature, acc_bonus, target)
+                    await self._execute_feature(ctx, enemy, feature, acc_bonus, target, dmg_bonus)
                 return
 
         # ══════════════════════════════════════════════════════════════════════
@@ -1388,7 +1478,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
         # prefix-split (supports reactions, explicit targeting, inactive NPCs).
         # ══════════════════════════════════════════════════════════════════════
         enemy: NpcEnemy | None = None
-        feature_query           = ""
+        feature_query = ""
 
         words = text.split()
         for split in range(len(words), 0, -1):
@@ -1396,7 +1486,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
             candidate_feat = " ".join(words[split:])
             e = npc_storage.resolve_enemy_slug(ctx.guild.id, ctx.channel.id, candidate_name)
             if e:
-                enemy         = e
+                enemy = e
                 feature_query = candidate_feat
                 break
 
@@ -1410,7 +1500,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
                     for f in list(e.weapons) + list(e.systems)
                 )
                 await ctx.reply(
-                    f"❌ **\"{text}\"** didn't match any feature on the active "
+                    f"**\"{text}\"** didn't match any feature on the active "
                     f"{'enemy' if len(active_enemies)==1 else 'enemies'} "
                     f"({active_names}), and didn't match any NPC name either.\n"
                     f"Active features: {all_features}",
@@ -1419,7 +1509,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
             else:
                 names = ", ".join(f"**{e.display_name}**" for e in enemies_alive)
                 await ctx.reply(
-                    f"❌ No active enemies and **\"{text}\"** didn't match any NPC name.\n"
+                    f"No active enemies and **\"{text}\"** didn't match any NPC name.\n"
                     f"Activate an enemy with `!npc activate` first, or use "
                     f"`!npca <enemy> <feature>`.\nAvailable enemies: {names}",
                     mention_author=False,
@@ -1429,7 +1519,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
         # Enemy found via prefix-split
         if not feature_query:
             # Just an enemy name, no feature → show picker for that enemy
-            await self._show_feature_picker(ctx, enemy, acc_bonus, target)
+            await self._show_feature_picker(ctx, enemy, acc_bonus, target, dmg_bonus)
             return
 
         matches = _fuzzy_feature(feature_query, enemy)
@@ -1438,7 +1528,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
                 f"**{f.name}**" for f in list(enemy.weapons) + list(enemy.systems)
             )
             await ctx.reply(
-                f"❌ No feature matching **\"{feature_query}\"** on {enemy.display_name}.\n"
+                f"No feature matching **\"{feature_query}\"** on {enemy.display_name}.\n"
                 f"Available: {all_names}",
                 mention_author=False,
             )
@@ -1446,7 +1536,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
 
         if len(matches) == 1:
             async with ctx.typing():
-                await self._execute_feature(ctx, enemy, matches[0], acc_bonus, target)
+                await self._execute_feature(ctx, enemy, matches[0], acc_bonus, target, dmg_bonus)
             return
 
         # Multiple feature matches on explicit enemy → disambiguate
@@ -1456,7 +1546,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
             return
         enemy, feature = chosen
         async with ctx.typing():
-            await self._execute_feature(ctx, enemy, feature, acc_bonus, target)
+            await self._execute_feature(ctx, enemy, feature, acc_bonus, target, dmg_bonus)
 
     # ── Internal helpers for npca routing ────────────────────────────────────
 
@@ -1466,6 +1556,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
         enemy: NpcEnemy,
         acc_bonus: int,
         target: "TargetResult | None" = None,
+        dmg_bonus: int = 0,
     ) -> None:
         """Post the FeaturePickerView embed for one enemy and execute on selection."""
         # Re-fetch fresh vitals
@@ -1473,22 +1564,22 @@ class EncounterCog(commands.Cog, name="Encounter"):
         if fresh:
             enemy = fresh
 
-        view  = FeaturePickerView(enemy, ctx.author.id)
+        view = FeaturePickerView(enemy, ctx.author.id)
         embed = discord.Embed(
-            title=f"🎲 {enemy.display_name} — Choose an Action",
+            title=f"{enemy.display_name} — Choose an Action",
             description=(
-                f"**{enemy.tag}** {enemy.role.title()} T{enemy.tier}  ·  "
-                f"❤️ {enemy.stats.current_hp}/{enemy.stats.hp} HP  "
-                f"🌡️ {enemy.stats.current_heat}/{enemy.stats.heatcap} Heat"
+                f"**{enemy.tag}** {enemy.role.title()} T{enemy.tier} · "
+                f"{enemy.stats.current_hp}/{enemy.stats.hp} HP "
+                f"{enemy.stats.current_heat}/{enemy.stats.heatcap} Heat"
             ),
             color=_enemy_color(enemy),
         )
 
         for group_type, icon, label in [
-            ("Weapon",   "⚔️", "Weapons"),
-            ("Tech",     "💻", "Tech Actions"),
-            ("System",   "🔧", "Systems"),
-            ("Trait",    "🧬", "Traits"),
+            ("Weapon", "", "Weapons"),
+            ("Tech", "", "Tech Actions"),
+            ("System", "", "Systems"),
+            ("Trait", "", "Traits"),
             ("Reaction", "↩️", "Reactions"),
         ]:
             items = (
@@ -1514,14 +1605,14 @@ class EncounterCog(commands.Cog, name="Encounter"):
         await view.wait()
 
         if view.chosen is None:
-            await msg.edit(content="⏱️ Timed out or cancelled.", embed=None, view=None)
+            await msg.edit(content="Timed out or cancelled.", embed=None, view=None)
             return
 
         await msg.edit(
-            content=f"🎲 **{enemy.display_name}** uses **{view.chosen.name}**…",
+            content=f"**{enemy.display_name}** uses **{view.chosen.name}**…",
             embed=None, view=None,
         )
-        await self._execute_feature(ctx, enemy, view.chosen, acc_bonus, target)
+        await self._execute_feature(ctx, enemy, view.chosen, acc_bonus, target, dmg_bonus)
 
     async def _pick_active_enemy(
         self,
@@ -1539,7 +1630,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
                 self.author_id = author_id
                 for i, e in enumerate(enemies[:5]):
                     btn = discord.ui.Button(
-                        label=f"⚡ {e.display_name}"[:80],
+                        label=f"[*] {e.display_name}"[:80],
                         style=discord.ButtonStyle.primary,
                         row=i,
                     )
@@ -1557,9 +1648,9 @@ class EncounterCog(commands.Cog, name="Encounter"):
                 return cb
 
         view = _PickView(active_enemies, ctx.author.id)
-        names = "  ·  ".join(f"**{e.display_name}**" for e in active_enemies)
-        msg   = await ctx.reply(
-            f"⚡ Multiple active enemies: {names}\nWhich one is acting?",
+        names = " · ".join(f"**{e.display_name}**" for e in active_enemies)
+        msg = await ctx.reply(
+            f"[*] Multiple active enemies: {names}\nWhich one is acting?",
             view=view,
             mention_author=False,
         )
@@ -1578,15 +1669,15 @@ class EncounterCog(commands.Cog, name="Encounter"):
         Each button label is '<EnemyName> — <FeatureName>'.
         """
         _TYPE_STYLE = {
-            "Weapon":   discord.ButtonStyle.danger,
-            "Tech":     discord.ButtonStyle.primary,
-            "System":   discord.ButtonStyle.secondary,
-            "Trait":    discord.ButtonStyle.secondary,
+            "Weapon": discord.ButtonStyle.danger,
+            "Tech": discord.ButtonStyle.primary,
+            "System": discord.ButtonStyle.secondary,
+            "Trait": discord.ButtonStyle.secondary,
             "Reaction": discord.ButtonStyle.secondary,
         }
         _TYPE_ICON = {
-            "Weapon": "⚔️", "Tech": "💻",
-            "System": "🔧", "Trait": "🧬", "Reaction": "↩️",
+            "Weapon": "", "Tech": "",
+            "System": "", "Trait": "", "Reaction": "↩️",
         }
 
         class _PairView(discord.ui.View):
@@ -1599,12 +1690,12 @@ class EncounterCog(commands.Cog, name="Encounter"):
                 self.chosen: tuple[NpcEnemy, NpcWeapon | NpcSystem] | None = None
                 self.author_id = author_id
                 for i, (e, f) in enumerate(pairs[:5]):
-                    is_w    = isinstance(f, NpcWeapon)
-                    ftype   = "Weapon" if is_w else f.system_type
-                    icon    = _TYPE_ICON.get(ftype, "▶️")
-                    style   = _TYPE_STYLE.get(ftype, discord.ButtonStyle.secondary)
-                    label   = f"{icon} {e.display_name} — {f.name}"[:80]
-                    btn     = discord.ui.Button(label=label, style=style, row=i)
+                    is_w = isinstance(f, NpcWeapon)
+                    ftype = "Weapon" if is_w else f.system_type
+                    icon = _TYPE_ICON.get(ftype, "")
+                    style = _TYPE_STYLE.get(ftype, discord.ButtonStyle.secondary)
+                    label = f"{icon} {e.display_name} — {f.name}"[:80]
+                    btn = discord.ui.Button(label=label, style=style, row=i)
                     btn.callback = self._make_cb((e, f))
                     self.add_item(btn)
 
@@ -1620,11 +1711,11 @@ class EncounterCog(commands.Cog, name="Encounter"):
 
         view = _PairView(pairs, ctx.author.id)
         lines = [
-            f"{'⚔️' if isinstance(f, NpcWeapon) else '🔧'} **{e.display_name}** — **{f.name}**"
+            f"{'' if isinstance(f, NpcWeapon) else ''} **{e.display_name}** — **{f.name}**"
             for e, f in pairs[:5]
         ]
         embed = discord.Embed(
-            title="🤔 Multiple matches — which one?",
+            title="Multiple matches — which one?",
             description="\n".join(lines),
             color=0xFFC107,
         )
@@ -1632,7 +1723,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
         await view.wait()
 
         if view.chosen is None:
-            await msg.edit(content="⏱️ Timed out.", embed=None, view=None)
+            await msg.edit(content="Timed out.", embed=None, view=None)
             return None
 
         await msg.delete()
@@ -1647,13 +1738,14 @@ class EncounterCog(commands.Cog, name="Encounter"):
         feature: NpcWeapon | NpcSystem,
         acc_bonus: int,
         target: "TargetResult | None" = None,
+        dmg_bonus: int = 0,
     ) -> None:
         """Dispatch to weapon, tech, or system handler."""
         if isinstance(feature, NpcWeapon):
-            await self._use_weapon(ctx, enemy, feature, acc_bonus, target)
+            await self._use_weapon(ctx, enemy, feature, acc_bonus, target, dmg_bonus)
         elif isinstance(feature, NpcSystem):
             if feature.system_type == "Tech":
-                await self._use_tech(ctx, enemy, feature, acc_bonus, target)
+                await self._use_tech(ctx, enemy, feature, acc_bonus, target, dmg_bonus)
             else:
                 await self._use_system(ctx, enemy, feature)
 
@@ -1664,41 +1756,43 @@ class EncounterCog(commands.Cog, name="Encounter"):
         weapon: NpcWeapon,
         acc_bonus: int,
         target: "TargetResult | None" = None,
+        dmg_bonus: int = 0,
     ) -> None:
         """Roll attack + damage for an NPC weapon, then show action buttons."""
-        # Re-fetch fresh vitals from DB
         fresh = npc_storage.get_enemy(ctx.guild.id, ctx.channel.id, enemy.slug)
         if fresh:
             enemy = fresh
 
-        attack      = NpcAttackResult(
+        attack = NpcAttackResult(
             attack_bonus  = weapon.attack_bonus,
             accuracy_dice = weapon.accuracy + acc_bonus,
         )
         dmg_results = _roll_npc_damage(weapon, attack.crit)
 
-        # Total damage to target (exclude heat-type entries which go to heat button)
+        # Total damage to target (exclude heat-type, add manual bonus)
         target_hp_dmg = sum(
             (r1 if (r2 is None or r1.total >= r2.total) else r2).total
             for _, r1, r2 in dmg_results
             if _.get("type", "").lower() != "heat"
-        )
+        ) + dmg_bonus
+
         heat_self = weapon.heat_self() or 0
 
-        embed = _build_weapon_embed(enemy, weapon, attack, dmg_results, target=target)
+        embed = _build_weapon_embed(enemy, weapon, attack, dmg_results,
+                                    target=target, dmg_bonus=dmg_bonus)
         embed.set_author(
             name=f"GM — {ctx.author.display_name}",
             icon_url=ctx.author.display_avatar.url,
         )
 
         view = NpcActionView(
-            guild_id    = ctx.guild.id,
-            channel_id  = ctx.channel.id,
-            enemy       = enemy,
-            self_heat   = heat_self,
-            hp_damage   = target_hp_dmg,
-            embed       = embed,
-            target      = target,
+            guild_id   = ctx.guild.id,
+            channel_id = ctx.channel.id,
+            enemy      = enemy,
+            self_heat  = heat_self,
+            hp_damage  = target_hp_dmg,
+            embed      = embed,
+            target     = target,
         )
         await ctx.reply(embed=embed, view=view, mention_author=False)
 
@@ -1709,6 +1803,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
         system: NpcSystem,
         acc_bonus: int,
         target: "TargetResult | None" = None,
+        dmg_bonus: int = 0,
     ) -> None:
         """Roll tech attack for an NPC Tech action."""
         fresh = npc_storage.get_enemy(ctx.guild.id, ctx.channel.id, enemy.slug)
@@ -1721,20 +1816,19 @@ class EncounterCog(commands.Cog, name="Encounter"):
         )
         annotated, _ = roll_all_dice_in_text(system.effect) if system.effect else ("", [])
 
-        embed = _build_tech_embed(enemy, system, attack, annotated, target=target)
+        embed = _build_tech_embed(enemy, system, attack, annotated,
+                                  target=target, dmg_bonus=dmg_bonus)
         embed.set_author(
             name=f"GM — {ctx.author.display_name}",
             icon_url=ctx.author.display_avatar.url,
         )
 
-        # Tech attacks deal no direct HP damage by default, but show the
-        # target HP button so the GM can apply any manual damage ruling.
         view = NpcActionView(
             guild_id   = ctx.guild.id,
             channel_id = ctx.channel.id,
             enemy      = enemy,
             self_heat  = 0,
-            hp_damage  = 0,      # GM decides damage from tech effect text
+            hp_damage  = dmg_bonus,   # 0 from dice, but manual bonus applies
             embed      = embed,
             target     = target,
         )
@@ -1762,7 +1856,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
     async def npc_error(self, ctx: commands.Context, error: commands.CommandError):
         if isinstance(error, commands.CommandNotFound):
             await ctx.reply(
-                "❓ Unknown subcommand. Run `!npc` for a list of commands.",
+                "Unknown subcommand. Run `!npc` for a list of commands.",
                 mention_author=False,
             )
         else:
@@ -1773,7 +1867,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
         cmd_name = ctx.command.name if ctx.command else ""
         if cmd_name in ("npca", "npcaction", "na"):
             await ctx.reply(
-                f"❌ {error}\nUsage: `!npca <enemy> [feature]`",
+                f"{error}\nUsage: `!npca <enemy> [feature]`",
                 mention_author=False,
             )
         else:
