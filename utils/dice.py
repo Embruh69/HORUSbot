@@ -72,7 +72,7 @@ class AttackRollResult:
             parts.append(f"Acc/Diff: {sign}{self.accuracy_result.applied}")
         parts.append(f"= **{self.total}**")
         if self.crit:
-            parts.append("🎯 **CRITICAL HIT!**")
+            parts.append("**CRITICAL HIT!**")
         return "  ".join(parts)
 
 

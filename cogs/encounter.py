@@ -303,7 +303,7 @@ def _build_system_embed(
     type_icons = {
         "System": "",
         "Trait": "",
-        "Reaction": "↩️",
+        "Reaction": "",
     }
     icon = type_icons.get(system.system_type, "")
     embed = discord.Embed(
@@ -349,7 +349,7 @@ class FeaturePickerView(discord.ui.View):
         "Tech": "",
         "System": "",
         "Trait": "",
-        "Reaction": "↩️",
+        "Reaction": "",
     }
 
     def __init__(self, enemy: NpcEnemy, author_id: int):
@@ -851,7 +851,7 @@ class FeatureDisambiguateView(discord.ui.View):
         "Tech": "",
         "System": "",
         "Trait": "",
-        "Reaction": "↩️",
+        "Reaction": "",
     }
 
     def __init__(self, matches: list[NpcWeapon | NpcSystem], author_id: int):
@@ -1580,7 +1580,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
             ("Tech", "", "Tech Actions"),
             ("System", "", "Systems"),
             ("Trait", "", "Traits"),
-            ("Reaction", "↩️", "Reactions"),
+            ("Reaction", "", "Reactions"),
         ]:
             items = (
                 list(enemy.weapons) if group_type == "Weapon"
@@ -1677,7 +1677,7 @@ class EncounterCog(commands.Cog, name="Encounter"):
         }
         _TYPE_ICON = {
             "Weapon": "", "Tech": "",
-            "System": "", "Trait": "", "Reaction": "↩️",
+            "System": "", "Trait": "", "Reaction": "",
         }
 
         class _PairView(discord.ui.View):

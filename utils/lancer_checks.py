@@ -41,12 +41,12 @@ class StructureResult:
     @property
     def result_name(self) -> str:
         if self.destroyed:
-            return "💀 MECH DESTROYED"
+            return "MECH DESTROYED"
         if len([d for d in self.dice_rolled if d == 1]) >= 2:
-            return "☠️ Multiple 1s — Crushing Hit"
-        table = {1: "💀 Direct Hit", 2: "⚠️ System Trauma", 3: "⚠️ System Trauma",
-                 4: "⚠️ System Trauma", 5: "🛡️ Glancing Blow", 6: "🛡️ Glancing Blow"}
-        return table.get(self.lowest, "❓ Unknown")
+            return "Multiple 1s — Crushing Hit"
+        table = {1: "Direct Hit", 2: "System Trauma", 3: "System Trauma",
+                 4: "System Trauma", 5: "Glancing Blow", 6: "Glancing Blow"}
+        return table.get(self.lowest, "Unknown")
 
     @property
     def result_detail(self) -> str:
@@ -102,13 +102,13 @@ class StressResult:
     @property
     def result_name(self) -> str:
         if self.meltdown:
-            return "☢️ REACTOR MELTDOWN"
+            return "REACTOR MELTDOWN"
         if len([d for d in self.dice_rolled if d == 1]) >= 2:
-            return "☢️ Multiple 1s — Irreversible Meltdown"
-        table = {1: "☢️ Meltdown", 2: "⚡ Destabilised Power Plant",
-                 3: "⚡ Destabilised Power Plant", 4: "⚡ Destabilised Power Plant",
-                 5: "🌡️ Emergency Shunt", 6: "🌡️ Emergency Shunt"}
-        return table.get(self.lowest, "❓ Unknown")
+            return "Multiple 1s — Irreversible Meltdown"
+        table = {1: "Meltdown", 2: "Destabilised Power Plant",
+                 3: "Destabilised Power Plant", 4: "Destabilised Power Plant",
+                 5: "Emergency Shunt", 6: "Emergency Shunt"}
+        return table.get(self.lowest, "Unknown")
 
     @property
     def result_detail(self) -> str:

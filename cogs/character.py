@@ -41,7 +41,7 @@ class CharacterCog(commands.Cog, name="Character"):
         """
         if not ctx.message.attachments:
             await ctx.reply(
-                "❌ No file attached.\n"
+                "No file attached.\n"
                 "Export your pilot from **comp/con** (`Export → Save Pilot`), "
                 "then run `!import` with the JSON file attached.",
                 mention_author=False,
@@ -53,14 +53,14 @@ class CharacterCog(commands.Cog, name="Character"):
         # Basic safety checks
         if not attachment.filename.endswith(".json"):
             await ctx.reply(
-                "❌ Please attach a `.json` file exported from comp/con.",
+                "Please attach a `.json` file exported from comp/con.",
                 mention_author=False,
             )
             return
 
         if attachment.size > MAX_ATTACHMENT_SIZE:
             await ctx.reply(
-                f"❌ File is too large ({attachment.size // 1024} KB). "
+                f"File is too large ({attachment.size // 1024} KB). "
                 "Maximum is 1 MB.",
                 mention_author=False,
             )
@@ -71,13 +71,13 @@ class CharacterCog(commands.Cog, name="Character"):
             try:
                 char = parse_compcon_json(raw)
             except ValueError as e:
-                await ctx.reply(f"❌ Could not parse your export:\n```\n{e}\n```", mention_author=False)
+                await ctx.reply(f"Could not parse your export:\n```\n{e}\n```", mention_author=False)
                 return
 
             storage.save(ctx.guild.id, ctx.author.id, char, raw.decode("utf-8"))
 
         embed = build_summary_embed(char)
-        embed.set_author(name=f"✅ Imported — {char.pilot.callsign}", icon_url=ctx.author.display_avatar.url)
+        embed.set_author(name=f"Imported — {char.pilot.callsign}", icon_url=ctx.author.display_avatar.url)
         await ctx.reply(embed=embed, mention_author=False)
 
     # ── !sheet ────────────────────────────────────────────────────────────────
@@ -99,7 +99,7 @@ class CharacterCog(commands.Cog, name="Character"):
         char = storage.load(ctx.guild.id, ctx.author.id)
         if not char:
             await ctx.reply(
-                "❌ No character imported. Use `!import` with your comp/con JSON attached.",
+                "No character imported. Use `!import` with your comp/con JSON attached.",
                 mention_author=False,
             )
             return
@@ -112,7 +112,7 @@ class CharacterCog(commands.Cog, name="Character"):
         """Display full pilot stats, skills, talents, and licenses."""
         char = storage.load(ctx.guild.id, ctx.author.id)
         if not char:
-            await ctx.reply("❌ No character imported. Use `!import` first.", mention_author=False)
+            await ctx.reply("No character imported. Use `!import` first.", mention_author=False)
             return
         embed = build_pilot_embed(char)
         embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
@@ -123,11 +123,11 @@ class CharacterCog(commands.Cog, name="Character"):
         """Display your active mech's stats."""
         char = storage.load(ctx.guild.id, ctx.author.id)
         if not char:
-            await ctx.reply("❌ No character imported. Use `!import` first.", mention_author=False)
+            await ctx.reply("No character imported. Use `!import` first.", mention_author=False)
             return
         mech = char.active_mech
         if not mech:
-            await ctx.reply("❌ No mechs found on this pilot.", mention_author=False)
+            await ctx.reply("No mechs found on this pilot.", mention_author=False)
             return
         embed = build_mech_embed(char, mech)
         embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
@@ -138,11 +138,11 @@ class CharacterCog(commands.Cog, name="Character"):
         """Display your active mech's weapons in detail."""
         char = storage.load(ctx.guild.id, ctx.author.id)
         if not char:
-            await ctx.reply("❌ No character imported. Use `!import` first.", mention_author=False)
+            await ctx.reply("No character imported. Use `!import` first.", mention_author=False)
             return
         mech = char.active_mech
         if not mech:
-            await ctx.reply("❌ No mechs found on this pilot.", mention_author=False)
+            await ctx.reply("No mechs found on this pilot.", mention_author=False)
             return
         embed = build_weapons_embed(char, mech)
         embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
@@ -153,11 +153,11 @@ class CharacterCog(commands.Cog, name="Character"):
         """Display your active mech's installed systems."""
         char = storage.load(ctx.guild.id, ctx.author.id)
         if not char:
-            await ctx.reply("❌ No character imported. Use `!import` first.", mention_author=False)
+            await ctx.reply("No character imported. Use `!import` first.", mention_author=False)
             return
         mech = char.active_mech
         if not mech:
-            await ctx.reply("❌ No mechs found on this pilot.", mention_author=False)
+            await ctx.reply("No mechs found on this pilot.", mention_author=False)
             return
         embed = build_systems_embed(char, mech)
         embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
@@ -168,7 +168,7 @@ class CharacterCog(commands.Cog, name="Character"):
         """Display your pilot's talents."""
         char = storage.load(ctx.guild.id, ctx.author.id)
         if not char:
-            await ctx.reply("❌ No character imported. Use `!import` first.", mention_author=False)
+            await ctx.reply("No character imported. Use `!import` first.", mention_author=False)
             return
         embed = build_talents_embed(char)
         embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
@@ -180,9 +180,9 @@ class CharacterCog(commands.Cog, name="Character"):
     async def delete_char(self, ctx: commands.Context):
         """Remove your imported character from this server."""
         if storage.delete(ctx.guild.id, ctx.author.id):
-            await ctx.reply("🗑️ Your character has been removed.", mention_author=False)
+            await ctx.reply("Your character has been removed.", mention_author=False)
         else:
-            await ctx.reply("❌ No character found to delete.", mention_author=False)
+            await ctx.reply("No character found to delete.", mention_author=False)
 
     # ── !lancer ───────────────────────────────────────────────────────────────
 
@@ -190,14 +190,14 @@ class CharacterCog(commands.Cog, name="Character"):
     async def lancer_help(self, ctx: commands.Context):
         """Show a quick-start guide for the bot."""
         embed = discord.Embed(
-            title="🤖 Lancer Bot — Quick Start",
+            title="Lancer Bot — Quick Start",
             description=(
                 "Import your **comp/con** pilot export and view your sheet in Discord."
             ),
             color=0xCF2020,
         )
         embed.add_field(
-            name="📥 Importing",
+            name="Importing",
             value=(
                 "1. In **comp/con**, go to your pilot → **Export → Save Pilot**\n"
                 "2. Attach the `.json` file to a Discord message\n"
@@ -206,7 +206,7 @@ class CharacterCog(commands.Cog, name="Character"):
             inline=False,
         )
         embed.add_field(
-            name="📋 Viewing your sheet",
+            name="Viewing your sheet",
             value=(
                 "`!sheet`          — overview (pilot + mech)\n"
                 "`!sheet pilot`    — pilot stats, skills, talents, licenses\n"
@@ -218,7 +218,7 @@ class CharacterCog(commands.Cog, name="Character"):
             inline=False,
         )
         embed.add_field(
-            name="🗑️ Removing",
+            name="Removing",
             value="`!delete` — remove your character from this server",
             inline=False,
         )
@@ -254,7 +254,7 @@ class CharacterCog(commands.Cog, name="Character"):
             filled = ms.current_hp
             bar = "\u2588" * filled + "\u2591" * (ms.hp - filled)
             await ctx.reply(
-                f"\u2764\ufe0f **{mech.name}** HP: `{bar}` **{ms.current_hp}/{ms.hp}**",
+                f"**{mech.name}** HP: `{bar}` **{ms.current_hp}/{ms.hp}**",
                 mention_author=False,
             )
             return
@@ -294,7 +294,7 @@ class CharacterCog(commands.Cog, name="Character"):
         bar = "\u2588" * final_hp + "\u2591" * (ms.hp - final_hp)
         change = f"({delta:+})" if is_relative else "(set)"
         await ctx.reply(
-            f"\u2764\ufe0f **{mech.name}** HP: `{bar}` **{old_hp}** \u2192 **{final_hp}/{ms.hp}** {change}",
+            f"**{mech.name}** HP: `{bar}` **{old_hp}** \u2192 **{final_hp}/{ms.hp}** {change}",
             mention_author=False,
         )
         if structure_result:
@@ -328,9 +328,9 @@ class CharacterCog(commands.Cog, name="Character"):
         if amount is None:
             filled = ms.current_heat
             bar = "\u2588" * filled + "\u2591" * (ms.heatcap - filled)
-            dz = "  \U0001f321\ufe0f DANGER ZONE" if filled >= ms.heatcap // 2 else ""
+            dz = "  DANGER ZONE" if filled >= ms.heatcap // 2 else ""
             await ctx.reply(
-                f"\U0001f321\ufe0f **{mech.name}** Heat: `{bar}` **{ms.current_heat}/{ms.heatcap}**{dz}",
+                f"**{mech.name}** Heat: `{bar}` **{ms.current_heat}/{ms.heatcap}**{dz}",
                 mention_author=False,
             )
             return
@@ -368,9 +368,9 @@ class CharacterCog(commands.Cog, name="Character"):
         final_heat = cur["heat"]
         bar = "\u2588" * min(final_heat, ms.heatcap) + "\u2591" * max(0, ms.heatcap - final_heat)
         change = f"({delta:+})" if is_relative else "(set)"
-        dz = "  \U0001f321\ufe0f **DANGER ZONE!**" if final_heat >= ms.heatcap // 2 and not stress_result else ""
+        dz = "  **DANGER ZONE!**" if final_heat >= ms.heatcap // 2 and not stress_result else ""
         await ctx.reply(
-            f"\U0001f321\ufe0f **{mech.name}** Heat: `{bar}` **{old_heat}** \u2192 **{final_heat}/{ms.heatcap}** {change}{dz}",
+            f"**{mech.name}** Heat: `{bar}` **{old_heat}** \u2192 **{final_heat}/{ms.heatcap}** {change}{dz}",
             mention_author=False,
         )
         if stress_result:
@@ -443,35 +443,35 @@ class CharacterCog(commands.Cog, name="Character"):
         stress_bar = "\u2588" * ms.stress
 
         embed = discord.Embed(
-            title=f"\U0001f527 Full Repair \u2014 {mech.name}",
+            title=f"Full Repair \u2014 {mech.name}",
             description=(
                 f"*{char.pilot.callsign}* has performed a Full Repair. All systems restored."
             ),
             color=0x4CAF50,
         )
         embed.add_field(
-            name="\u2764\ufe0f HP",
+            name="HP",
             value=f"`{hp_bar}` {old['hp']} \u2192 **{ms.hp}/{ms.hp}**",
             inline=True,
         )
         embed.add_field(
-            name="\U0001f321\ufe0f Heat",
+            name="Heat",
             value=f"`{heat_bar}` {old['heat']} \u2192 **0/{ms.heatcap}**",
             inline=True,
         )
         embed.add_field(name="\u200b", value="\u200b", inline=True)
         embed.add_field(
-            name="\U0001f6e1\ufe0f Structure",
+            name="Structure",
             value=f"`{str_bar}` {old['structure']} \u2192 **{ms.structure}/{ms.structure}**",
             inline=True,
         )
         embed.add_field(
-            name="\u26db\ufe0f Stress",
+            name="Stress",
             value=f"`{stress_bar}` {old['stress']} \u2192 **{ms.stress}/{ms.stress}**",
             inline=True,
         )
         if old["burn"] > 0:
-            embed.add_field(name="\U0001f525 Burn", value=f"{old['burn']} \u2192 **0** (cleared)", inline=True)
+            embed.add_field(name="Burn", value=f"{old['burn']} \u2192 **0** (cleared)", inline=True)
         embed.set_footer(text="LIMITED systems reloaded \u00b7 Statuses cleared")
         embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
         await ctx.reply(embed=embed, mention_author=False)

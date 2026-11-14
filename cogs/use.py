@@ -515,7 +515,7 @@ _ACTIVATION_EMOJI = {
     "protocol": "",
     "quick": "[*]",
     "full": "",
-    "reaction": "↩️",
+    "reaction": "",
     "invade": "",
     "free": "",
 }

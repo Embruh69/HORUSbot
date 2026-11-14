@@ -32,7 +32,7 @@ bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f"✅  Logged in as {bot.user}  (id: {bot.user.id})")
+    print(f" Logged in as {bot.user}  (id: {bot.user.id})")
     print(f"    Prefix : {COMMAND_PREFIX}")
     print(f"    Guilds : {len(bot.guilds)}")
     await bot.tree.sync()

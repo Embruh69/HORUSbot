@@ -120,7 +120,7 @@ def build_npc_statblock_embed(enemy: NpcEnemy) -> discord.Embed:
         (traits, "", "Traits"),
         (systems, "", "Systems"),
         (techs, "", "Tech Actions"),
-        (reactions, "↩️", "Reactions"),
+        (reactions, "", "Reactions"),
     ):
         if not group:
             continue

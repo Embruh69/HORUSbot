@@ -45,7 +45,7 @@ def _lic_name(lic_id: str) -> str:
 
 def build_pilot_embed(char: LancerCharacter) -> discord.Embed:
     p = char.pilot
-    title = f"🪖 {p.callsign}"
+    title = f"{p.callsign}"
     if p.name:
         title += f"  ·  {p.name}"
     desc_parts = [f"**LL{p.level}** Pilot  ·  Status: **{p.status}**"]
@@ -61,7 +61,7 @@ def build_pilot_embed(char: LancerCharacter) -> discord.Embed:
     # ── Pilot stats ──────────────────────────────────────────────────────────
     s = p.stats
     embed.add_field(
-        name="📊 Pilot Stats",
+        name="Pilot Stats",
         value=(
             f"**HP** {s.hp}  ·  **Armor** {s.armor}  ·  **Grit** +{s.grit}\n"
             f"**Speed** {s.speed}  ·  **Evasion** {s.evasion}  ·  **E-Defense** {s.edef}"
@@ -71,7 +71,7 @@ def build_pilot_embed(char: LancerCharacter) -> discord.Embed:
 
     # ── HASE ─────────────────────────────────────────────────────────────────
     embed.add_field(
-        name="⚙️ Mech Skills (HASE)",
+        name="Mech Skills (HASE)",
         value=(
             f"**H**ull `{s.hull:+d}`  ·  **A**gi `{s.agility:+d}`  ·  "
             f"**S**ys `{s.systems:+d}`  ·  **E**ng `{s.engineering:+d}`"
@@ -86,7 +86,7 @@ def build_pilot_embed(char: LancerCharacter) -> discord.Embed:
             sorted(p.skills, key=lambda x: -x.bonus)
         ]
         embed.add_field(
-            name=f"🎯 Skills ({len(p.skills)})",
+            name=f"Skills ({len(p.skills)})",
             value="\n".join(skill_lines) or "—",
             inline=True,
         )
@@ -98,7 +98,7 @@ def build_pilot_embed(char: LancerCharacter) -> discord.Embed:
             for t in p.talents
         ]
         embed.add_field(
-            name=f"✨ Talents ({len(p.talents)})",
+            name=f"Talents ({len(p.talents)})",
             value="\n".join(talent_lines) or "—",
             inline=True,
         )
@@ -110,7 +110,7 @@ def build_pilot_embed(char: LancerCharacter) -> discord.Embed:
             for lic_id, rank in p.licenses
         ]
         embed.add_field(
-            name="📜 Licenses",
+            name="Licenses",
             value="\n".join(lic_lines) or "—",
             inline=False,
         )
@@ -125,7 +125,7 @@ def build_pilot_embed(char: LancerCharacter) -> discord.Embed:
                 f"{m.frame_source} {m.frame_name}"
             )
         embed.add_field(
-            name="🤖 Mechs",
+            name="Mechs",
             value="\n".join(mech_lines),
             inline=False,
         )
@@ -141,7 +141,7 @@ def build_mech_embed(char: LancerCharacter, mech: Mech) -> discord.Embed:
     mechtype_str = " / ".join(mech.frame_mechtype) if mech.frame_mechtype else ""
 
     embed = discord.Embed(
-        title=f"🤖 {mech.name}",
+        title=f"{mech.name}",
         description=(
             f"**{mech.frame_source} {mech.frame_name}**"
             + (f"  ·  {mechtype_str}" if mechtype_str else "")
@@ -157,7 +157,7 @@ def build_mech_embed(char: LancerCharacter, mech: Mech) -> discord.Embed:
     stress_bar = _progress_bar(s.current_stress, s.stress)
 
     embed.add_field(
-        name="❤️ Vitals",
+        name="Vitals",
         value=(
             f"**HP**       `{hp_bar}` {s.current_hp}/{s.hp}\n"
             f"**Heat**     `{heat_bar}` {s.current_heat}/{s.heatcap}\n"
@@ -168,7 +168,7 @@ def build_mech_embed(char: LancerCharacter, mech: Mech) -> discord.Embed:
     )
 
     embed.add_field(
-        name="🛡️ Defense",
+        name="Defense",
         value=(
             f"**Armor** {s.armor}  ·  **Evasion** {s.evasion}  ·  "
             f"**E-Defense** {s.edef}\n"
@@ -192,7 +192,7 @@ def build_mech_embed(char: LancerCharacter, mech: Mech) -> discord.Embed:
             )
 
         embed.add_field(
-            name=f"🧬 Frame Traits ({len(mech.traits)})",
+            name=f"Frame Traits ({len(mech.traits)})",
             value="\n\n".join(trait_lines)[:1024],
             inline=False,
         )
@@ -208,7 +208,7 @@ def build_mech_embed(char: LancerCharacter, mech: Mech) -> discord.Embed:
         )
 
         embed.add_field(
-            name=f"⚛️ Core Power — {cp.name}",
+            name=f"Core Power — {cp.name}",
             value=value[:1024],
             inline=False,
         )
@@ -226,7 +226,7 @@ def build_mech_embed(char: LancerCharacter, mech: Mech) -> discord.Embed:
                 line += f"  ·  Range: {rng}"
             weapon_lines.append(line)
         embed.add_field(
-            name=f"⚔️ Weapons ({len(mech.weapons)})",
+            name=f"Weapons ({len(mech.weapons)})",
             value="\n".join(weapon_lines),
             inline=False,
         )
@@ -235,7 +235,7 @@ def build_mech_embed(char: LancerCharacter, mech: Mech) -> discord.Embed:
     if mech.systems:
         sys_lines = [f"**{sys.name}**" + (f" (SP {sys.sp})" if sys.sp else "") for sys in mech.systems]
         embed.add_field(
-            name=f"🔧 Systems ({len(mech.systems)})",
+            name=f"Systems ({len(mech.systems)})",
             value="\n".join(sys_lines),
             inline=False,
         )
@@ -255,7 +255,7 @@ def build_summary_embed(char: LancerCharacter) -> discord.Embed:
     m = char.active_mech
 
     embed = discord.Embed(
-        title=f"📋 {p.callsign}" + (f"  ·  {p.name}" if p.name else ""),
+        title=f"{p.callsign}" + (f"  ·  {p.name}" if p.name else ""),
         description=f"**LL{p.level}** Pilot",
         color=_mech_colour(m) if m else LANCER_RED,
     )
@@ -263,7 +263,7 @@ def build_summary_embed(char: LancerCharacter) -> discord.Embed:
     # Pilot column
     ps = p.stats
     embed.add_field(
-        name="🪖 Pilot",
+        name="Pilot",
         value=(
             f"HP **{ps.hp}**  ·  Armor **{ps.armor}**\n"
             f"EVA **{ps.evasion}**  ·  EDEF **{ps.edef}**\n"
@@ -277,7 +277,7 @@ def build_summary_embed(char: LancerCharacter) -> discord.Embed:
     if m:
         ms = m.stats
         embed.add_field(
-            name=f"🤖 {m.name} ({m.frame_source} {m.frame_name})",
+            name=f"{m.name} ({m.frame_source} {m.frame_name})",
             value=(
                 f"HP **{ms.hp}**  ·  Heat **{ms.heatcap}**\n"
                 f"Struct **{ms.structure}**  ·  Stress **{ms.stress}**\n"
@@ -303,7 +303,7 @@ def build_summary_embed(char: LancerCharacter) -> discord.Embed:
 
 def build_weapons_embed(char: LancerCharacter, mech: Mech) -> discord.Embed:
     embed = discord.Embed(
-        title=f"⚔️ {mech.name} — Weapons",
+        title=f"{mech.name} — Weapons",
         color=_mech_colour(mech),
     )
     if not mech.weapons:
@@ -333,7 +333,7 @@ def build_weapons_embed(char: LancerCharacter, mech: Mech) -> discord.Embed:
 
 def build_systems_embed(char: LancerCharacter, mech: Mech) -> discord.Embed:
     embed = discord.Embed(
-        title=f"🔧 {mech.name} — Systems",
+        title=f"{mech.name} — Systems",
         color=_mech_colour(mech),
     )
     if not mech.systems:
@@ -367,7 +367,7 @@ def build_systems_embed(char: LancerCharacter, mech: Mech) -> discord.Embed:
 def build_talents_embed(char: LancerCharacter) -> discord.Embed:
     p = char.pilot
     embed = discord.Embed(
-        title=f"✨ {p.callsign} — Talents",
+        title=f"{p.callsign} — Talents",
         color=LANCER_RED,
     )
     for t in p.talents:
